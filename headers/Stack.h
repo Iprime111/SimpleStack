@@ -43,7 +43,7 @@ struct Stack {
     elem_t *data;
 };
 
-Stack_error_code StackInit (Stack *stack);
+Stack_error_code StackInit (Stack *stack, ssize_t initial_capacity = InitialCapacity);
 Stack_error_code StackDestruct (Stack *stack);
 Stack_error_code StackRealloc (Stack *stack);
 

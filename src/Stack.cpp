@@ -4,10 +4,10 @@
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
-Stack_error_code StackInit (Stack *stack) {
+Stack_error_code StackInit (Stack *stack, ssize_t initial_capacity) {
     PushLog (2);
 
-    stack->capacity = InitialCapacity;
+    stack->capacity = initial_capacity;
     stack->size = 0;
     stack->data = (elem_t *) calloc ((size_t) stack->capacity, sizeof (elem_t));
 
