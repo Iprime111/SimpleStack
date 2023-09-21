@@ -13,20 +13,20 @@ const ssize_t InitialCapacity = 10;
 
 
 #ifndef _NDEBUG
-    #define DumpStack(stack, error_code) StackDump (stack, error_code, __PRETTY_FUNCTION__, __FILE__, __LINE__)
+    #define DumpStack(stack) StackDump (stack, __PRETTY_FUNCTION__, __FILE__, __LINE__)
 #else
-    #define DumpStack(stack, error_code) ;
+    #define DumpStack(stack) ;
 #endif
 
-#define VerifyStack(stack)  do {                                                              \
-                                Stack_error_code stack_verify_result_ = StackVerifier (stack);\
-                                if (stack_verify_result_ != no_errors) {                      \
-                                    DumpStack (stack, stack_verify_result_);                  \
-                                    RETURN stack_verify_result_;                              \
-                                }                                                             \
+#define VerifyStack(stack)  do {                                                                                        \
+                                (stack)->errorCode = (StackErrorCode) (StackVerifier (stack) | (stack)->errorCode);     \
+                                if ((stack)->errorCode != no_errors) {                                                  \
+                                    DumpStack (stack);                                                                  \
+                                    RETURN (stack)->errorCode;                                                          \
+                                }                                                                                       \
                             }while (0)
 
-enum Stack_error_code {
+enum StackErrorCode {
     no_errors              = 0,
     stack_pointer_null     = 1 << 0,
     data_pointer_null      = 1 << 1,
@@ -34,6 +34,7 @@ enum Stack_error_code {
     anti_overflow          = 1 << 3,
     overflow               = 1 << 4,
     invalid_input          = 1 << 5,
+    reallocation_error     = 1 << 6,
 };
 
 struct Stack {
@@ -41,18 +42,20 @@ struct Stack {
     ssize_t size;
 
     elem_t *data;
+
+    StackErrorCode errorCode;
 };
 
-Stack_error_code StackInit (Stack *stack);
-Stack_error_code StackDestruct (Stack *stack);
-Stack_error_code StackRealloc (Stack *stack);
+StackErrorCode StackInit (Stack *stack, ssize_t initialCapacity = InitialCapacity);
+StackErrorCode StackDestruct (Stack *stack);
+StackErrorCode StackRealloc (Stack *stack);
 
-Stack_error_code StackPop (Stack *stack, elem_t *return_value);
-Stack_error_code StackPush (Stack *stack, elem_t value);
+StackErrorCode StackPop (Stack *stack, elem_t *return_value);
+StackErrorCode StackPush (Stack *stack, elem_t value);
 
-Stack_error_code StackVerifier (const Stack *stack);
-void StackDump (const Stack *stack, const Stack_error_code error_code, const char *function, const char *file, int line);
-void DumpErrors (const Stack_error_code error_code, const char *function, const char *file, int line);
+StackErrorCode StackVerifier (Stack *stack);
+void StackDump (const Stack *stack, const char *function, const char *file, int line);
+void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line);
 void DumpStackData (const Stack *stack);
 
 #endif
