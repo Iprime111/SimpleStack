@@ -142,17 +142,17 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
 
-    fprintf_color (Console_red, Console_normal, stderr, "Stack has been corrupted in function %s (%s:%d)\n", function, file, line);
-    fprintf_color (Console_red, Console_normal, stderr, "Stack variable name: \"%s\".Called from %s (%s:%d)\n", callData.variableName, callData.function, callData.file, callData.line);
+    fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Stack has been corrupted in function %s (%s:%d)\n", function, file, line);
+    fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Stack variable name: \"%s\".Called from %s (%s:%d)\n", callData.variableName, callData.function, callData.file, callData.line);
 
-    fprintf_color (Console_red, Console_bold, stderr, "REPORT:\n");
+    fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "REPORT:\n");
 
     if (errorCode == no_errors){
-        fprintf_color (Console_white, Console_bold, stderr, "No errors have been registered\n");
+        fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "No errors have been registered\n");
     }else{
         #define ERROR_MSG_(error, errorPattern, message)                                                                                \
                                             if (error & errorPattern){                                                                  \
-                                                fprintf_color (Console_white, Console_bold, stderr, "%s: %s\n", #errorPattern, message);\
+                                                fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "%s: %s\n", #errorPattern, message);\
                                             }
 
         ERROR_MSG_ (errorCode, stack_pointer_null,     "Pointer to stack variable has NULL value");
@@ -170,17 +170,17 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
 
 void DumpStackData (const Stack *stack){
     if (!stack){
-        fprintf_color (Console_red, Console_bold, stderr, "Unable to read stack value\n");
+        fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Unable to read stack value\n");
 
         return;
     }
 
-    fprintf_color (Console_red, Console_bold, stderr, "Stack (%p){\n", stack);
+    fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Stack (%p){\n", stack);
 
     #define PRINT_VARIABLE_(variable, printfSpecifier)                                                                                              \
                                                 do {                                                                                                \
-                                                    fprintf_color (Console_green,  Console_bold, stderr, "\t%s (%p) = ", #variable, &(variable));   \
-                                                    fprintf_color (Console_purple, Console_bold, stderr, printfSpecifier "\n", variable);           \
+                                                    fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", #variable, &(variable));   \
+                                                    fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, printfSpecifier "\n", variable);           \
                                                 }while (0)
 
     ssize_t capacity = stack->capacity;
@@ -191,11 +191,11 @@ void DumpStackData (const Stack *stack){
 
     #undef PRINT_VARIABLE_
 
-    fprintf_color (Console_purple, Console_normal, stderr, "\tdata (%p){\n ", stack->data);
+    fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, "\tdata (%p){\n ", stack->data);
 
     if (!stack->data){
-        fprintf_color (Console_yellow, Console_bold, stderr, "\t\tUnable to read stack->data value\n}\n");
-        fprintf_color (Console_red,    Console_bold, stderr, "}\n");
+        fprintf_color (CONSOLE_YELLOW, CONSOLE_BOLD, stderr, "\t\tUnable to read stack->data value\n}\n");
+        fprintf_color (CONSOLE_RED,    CONSOLE_BOLD, stderr, "}\n");
 
         return;
     }
@@ -203,19 +203,19 @@ void DumpStackData (const Stack *stack){
     size_t realStackCapacity = malloc_usable_size (const_cast <elem_t *> (stack->data)) / sizeof (elem_t);
 
     for (size_t index = 0; index < realStackCapacity; index++){
-        CONSOLE_COLOR dataColor = Console_red;
+        CONSOLE_COLOR dataColor = CONSOLE_RED;
 
         if ((ssize_t) index < stack->size)
-            dataColor = Console_green;
+            dataColor = CONSOLE_GREEN;
 
-        fprintf_color (dataColor,     Console_normal, stderr, "\t\tdata [%lu] (%p) = ", index, stack->data + index);
-        fprintf_color (Console_purple, Console_normal, stderr, ElementPrintfSpecifier "\n", stack->data [index]);
+        fprintf_color (dataColor,     CONSOLE_NORMAL, stderr, "\t\tdata [%lu] (%p) = ", index, stack->data + index);
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, ElementPrintfSpecifier "\n", stack->data [index]);
 
     }
 
-    fprintf_color (Console_purple, Console_bold, stderr, "\t}\n");
+    fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "\t}\n");
 
-    fprintf_color (Console_red,   Console_bold, stderr, "}\n");
+    fprintf_color (CONSOLE_RED,   CONSOLE_BOLD, stderr, "}\n");
 }
 
 void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData) {
@@ -227,7 +227,7 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
 
     DumpStackData (stack);
 
-    fprintf_color (Console_red, Console_bold, stderr, "\nBACKTRACE:\n");
+    fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "\nBACKTRACE:\n");
 
     Show_stack_trace ();
 
