@@ -17,18 +17,18 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
     stack->capacity = initialCapacity;
     stack->size = 0;
     stack->data = (elem_t *) calloc ((size_t) stack->capacity, sizeof (elem_t));
-    stack->errorCode = no_errors;
+    stack->errorCode = NO_ERRORS;
 
     VerifyStack (stack, callData);
 
-    RETURN no_errors;
+    RETURN NO_ERRORS;
 }
 
 StackErrorCode StackDestruct (Stack *stack) {
     PushLog (2);
 
     if (!stack){
-        RETURN stack_pointer_null;
+        RETURN STACK_POINTER_NULL;
     }
 
     if (stack->data){
@@ -44,9 +44,9 @@ StackErrorCode StackDestruct (Stack *stack) {
     stack->data = NULL;
     stack->capacity = -1;
     stack->size = -1;
-    stack->errorCode = (StackErrorCode) (stack_pointer_null | data_pointer_null | invalid_capacity_value | anti_overflow | overflow | invalid_input);
+    stack->errorCode = (StackErrorCode) (STACK_POINTER_NULL | DATA_POINTER_NULL | INVALID_CAPACITY_VALUE | ANTI_OVERFLOW | OVERFLOW | INVALID_INPUT | REALLOCATION_ERROR);
 
-    RETURN no_errors;
+    RETURN NO_ERRORS;
 }
 
 StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
@@ -68,7 +68,7 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     if (shouldRealloc){
         elem_t *testDataPointer = (elem_t *) realloc (stack->data, (size_t) stack->capacity * sizeof (elem_t));
         if (!testDataPointer){
-            stack->errorCode = (StackErrorCode) (stack->errorCode | reallocation_error);
+            stack->errorCode = (StackErrorCode) (stack->errorCode | REALLOCATION_ERROR);
             RETURN stack->errorCode;
         }
 
@@ -83,12 +83,12 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
 StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
-    custom_assert (returnValue != NULL, pointer_is_null, invalid_input);
+    custom_assert (returnValue != NULL, pointer_is_null, INVALID_INPUT);
 
     VerifyStack (stack, callData);
 
     if (stack->size == 0){
-        stack->errorCode = (StackErrorCode) (stack->errorCode | anti_overflow);
+        stack->errorCode = (StackErrorCode) (stack->errorCode | ANTI_OVERFLOW);
 
         DumpStack (stack, callData);
 
@@ -108,7 +108,7 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
 
     stack->errorCode = (StackErrorCode) (stack->errorCode | StackRealloc (stack, callData));
 
-    if (stack->errorCode == no_errors)
+    if (stack->errorCode == NO_ERRORS)
         stack->data [stack->size++] = value;
 
     RETURN stack->errorCode;
@@ -118,7 +118,7 @@ StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
 
     if (!stack){
-        RETURN stack_pointer_null;
+        RETURN STACK_POINTER_NULL;
     }
 
     #define VerifyExpression_(errorExp, patternErrorCode)                                                                   \
@@ -126,10 +126,10 @@ StackErrorCode StackVerifier (Stack *stack) {
                                             (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
                                         }
 
-    VerifyExpression_ (stack->data,                    data_pointer_null);
-    VerifyExpression_ (stack->capacity >= 0,           invalid_capacity_value);
-    VerifyExpression_ (stack->size >= 0,               anti_overflow);
-    VerifyExpression_ (stack->size <= stack->capacity, overflow);
+    VerifyExpression_ (stack->data,                    DATA_POINTER_NULL);
+    VerifyExpression_ (stack->capacity >= 0,           INVALID_CAPACITY_VALUE);
+    VerifyExpression_ (stack->size >= 0,               ANTI_OVERFLOW);
+    VerifyExpression_ (stack->size <= stack->capacity, OVERFLOW);
 
 
     #undef VerifyExpression_
@@ -147,7 +147,7 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
 
     fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "REPORT:\n");
 
-    if (errorCode == no_errors){
+    if (errorCode == NO_ERRORS){
         fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "No errors have been registered\n");
     }else{
         #define ERROR_MSG_(error, errorPattern, message)                                                                                \
@@ -155,11 +155,11 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
                                                 fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "%s: %s\n", #errorPattern, message);\
                                             }
 
-        ERROR_MSG_ (errorCode, stack_pointer_null,     "Pointer to stack variable has NULL value");
-        ERROR_MSG_ (errorCode, data_pointer_null,      "Pointer to stack data has NULL value");
-        ERROR_MSG_ (errorCode, invalid_capacity_value, "Stack has invalid capacity");
-        ERROR_MSG_ (errorCode, overflow,               "Stack overflow has been occuried");
-        ERROR_MSG_ (errorCode, anti_overflow,          "Stack anti-overflow has been occuried");
+        ERROR_MSG_ (errorCode, STACK_POINTER_NULL,     "Pointer to stack variable has NULL value");
+        ERROR_MSG_ (errorCode, DATA_POINTER_NULL,      "Pointer to stack data has NULL value");
+        ERROR_MSG_ (errorCode, INVALID_CAPACITY_VALUE, "Stack has invalid capacity");
+        ERROR_MSG_ (errorCode, OVERFLOW,               "Stack OVERFLOW has been occuried");
+        ERROR_MSG_ (errorCode, ANTI_OVERFLOW,          "Stack anti-OVERFLOW has been occuried");
         ERROR_MSG_ (errorCode, allocation_error,       "Memory reallocation failed");
 
         #undef  ERROR_MSG_

@@ -40,7 +40,7 @@ else
 
 srcObjects = $(addprefix $(buildDir_Stack)/, $(sources:.cpp=.o))
 
-.PHONY: all prepare build_docs
+.PHONY: all prepare build_docs compile_libs
 
 all: $(buildDir_Stack)/$(target)
 
@@ -51,14 +51,17 @@ $(srcObjects): $(buildDir_Stack)/%.o: $(srcDir)/%.cpp
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 
-$(buildDir_Stack)/$(target): prepare $(srcObjects)
-	cd CustomAssert && make $(makeMode)
-	cd CustomAssert/ColorConsole && make $(makeMode)
+$(buildDir_Stack)/$(target): prepare compile_libs $(srcObjects)
+
 
 	$(eval objects = $(srcObjects) $(libObjects))
 
 	@echo [CXX] $(objects) -o $@
 	@$(CXX) $(CXXFLAGS) $(objects) -o $@
+
+compile_libs:
+	cd CustomAssert && make $(makeMode)
+	cd CustomAssert/ColorConsole && make $(makeMode)
 
 prepare:
 	@mkdir -p $(outDir)

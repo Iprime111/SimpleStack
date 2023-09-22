@@ -21,21 +21,21 @@ const ssize_t InitialCapacity = 10;
 #define VerifyStack(stack, stackCallData)                                                                               \
                             do {                                                                                        \
                                 (stack)->errorCode = (StackErrorCode) (StackVerifier (stack) | (stack)->errorCode);     \
-                                if ((stack)->errorCode != no_errors) {                                                  \
+                                if ((stack)->errorCode != NO_ERRORS) {                                                  \
                                     DumpStack (stack, stackCallData);                                                   \
                                     RETURN (stack)->errorCode;                                                          \
                                 }                                                                                       \
                             }while (0)
 
 enum StackErrorCode {
-    no_errors              = 0,
-    stack_pointer_null     = 1 << 0,
-    data_pointer_null      = 1 << 1,
-    invalid_capacity_value = 1 << 2,
-    anti_overflow          = 1 << 3,
-    overflow               = 1 << 4,
-    invalid_input          = 1 << 5,
-    reallocation_error     = 1 << 6,
+    NO_ERRORS              = 0,
+    STACK_POINTER_NULL     = 1 << 0,
+    DATA_POINTER_NULL      = 1 << 1,
+    INVALID_CAPACITY_VALUE = 1 << 2,
+    ANTI_OVERFLOW          = 1 << 3,
+    OVERFLOW               = 1 << 4,
+    INVALID_INPUT          = 1 << 5,
+    REALLOCATION_ERROR     = 1 << 6,
 };
 
 struct Stack {
