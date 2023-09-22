@@ -4,7 +4,14 @@
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
-StackErrorCode StackInit (Stack *stack, ssize_t initialCapacity) {
+StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
+
+StackErrorCode StackVerifier (Stack *stack);
+void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
+void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
+void DumpStackData (const Stack *stack);
+
+StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
     stack->capacity = initialCapacity;
@@ -12,7 +19,7 @@ StackErrorCode StackInit (Stack *stack, ssize_t initialCapacity) {
     stack->data = (elem_t *) calloc ((size_t) stack->capacity, sizeof (elem_t));
     stack->errorCode = no_errors;
 
-    VerifyStack (stack);
+    VerifyStack (stack, callData);
 
     RETURN no_errors;
 }
@@ -24,7 +31,15 @@ StackErrorCode StackDestruct (Stack *stack) {
         RETURN stack_pointer_null;
     }
 
-    free (stack->data);
+    if (stack->data){
+        size_t realStackCapacity = malloc_usable_size (const_cast <elem_t *> (stack->data)) / sizeof (elem_t);
+
+        for (size_t index = 0; index < realStackCapacity; index++){
+            stack->data [index] = PoisonValue;
+        }
+
+        free (stack->data);
+    }
 
     stack->data = NULL;
     stack->capacity = -1;
@@ -34,9 +49,9 @@ StackErrorCode StackDestruct (Stack *stack) {
     RETURN no_errors;
 }
 
-StackErrorCode StackRealloc (Stack *stack){
+StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     PushLog (3);
-    VerifyStack (stack);
+    VerifyStack (stack, callData);
 
     bool shouldRealloc = false;
 
@@ -60,38 +75,38 @@ StackErrorCode StackRealloc (Stack *stack){
         stack->data = testDataPointer;
     }
 
-    VerifyStack (stack);
+    VerifyStack (stack, callData);
 
     RETURN stack->errorCode;
 }
 
-StackErrorCode StackPop (Stack *stack, elem_t *returnValue) {
+StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
     custom_assert (returnValue != NULL, pointer_is_null, invalid_input);
 
-    VerifyStack (stack);
+    VerifyStack (stack, callData);
 
     if (stack->size == 0){
         stack->errorCode = (StackErrorCode) (stack->errorCode | anti_overflow);
 
-        DumpStack (stack);
+        DumpStack (stack, callData);
 
         RETURN stack->errorCode;
     }
 
     *returnValue = stack->data [--stack->size];
 
-    stack->errorCode = (StackErrorCode) (StackRealloc (stack) | stack->errorCode);
+    stack->errorCode = (StackErrorCode) (StackRealloc (stack, callData) | stack->errorCode);
 
     RETURN stack->errorCode;
 }
 
-StackErrorCode StackPush (Stack *stack, elem_t value) {
+StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData) {
     PushLog (2);
-    VerifyStack (stack);
+    VerifyStack (stack, callData);
 
-    stack->errorCode = (StackErrorCode) (stack->errorCode | StackRealloc (stack));
+    stack->errorCode = (StackErrorCode) (stack->errorCode | StackRealloc (stack, callData));
 
     if (stack->errorCode == no_errors)
         stack->data [stack->size++] = value;
@@ -106,7 +121,10 @@ StackErrorCode StackVerifier (Stack *stack) {
         RETURN stack_pointer_null;
     }
 
-    #define VerifyExpression_(errorExp, patternErrorCode) if (!(errorExp)) { (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode); }
+    #define VerifyExpression_(errorExp, patternErrorCode)                                                                   \
+                                        if (!(errorExp)) {                                                                  \
+                                            (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
+                                        }
 
     VerifyExpression_ (stack->data,                    data_pointer_null);
     VerifyExpression_ (stack->capacity >= 0,           invalid_capacity_value);
@@ -119,19 +137,23 @@ StackErrorCode StackVerifier (Stack *stack) {
     RETURN stack->errorCode;
 }
 
-void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line){
+void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData){
     custom_assert_without_logger (function != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
 
     fprintf_color (Console_red, Console_normal, stderr, "Stack has been corrupted in function %s (%s:%d)\n", function, file, line);
+    fprintf_color (Console_red, Console_normal, stderr, "Stack variable name: \"%s\".Called from %s (%s:%d)\n", callData.variableName, callData.function, callData.file, callData.line);
 
     fprintf_color (Console_red, Console_bold, stderr, "REPORT:\n");
 
     if (errorCode == no_errors){
         fprintf_color (Console_white, Console_bold, stderr, "No errors have been registered\n");
     }else{
-        #define ERROR_MSG_(error, errorPattern, message) if (error & errorPattern){fprintf_color (Console_white, Console_bold, stderr, "%s: %s\n", #errorPattern, message);}
+        #define ERROR_MSG_(error, errorPattern, message)                                                                                \
+                                            if (error & errorPattern){                                                                  \
+                                                fprintf_color (Console_white, Console_bold, stderr, "%s: %s\n", #errorPattern, message);\
+                                            }
 
         ERROR_MSG_ (errorCode, stack_pointer_null,     "Pointer to stack variable has NULL value");
         ERROR_MSG_ (errorCode, data_pointer_null,      "Pointer to stack data has NULL value");
@@ -155,10 +177,11 @@ void DumpStackData (const Stack *stack){
 
     fprintf_color (Console_red, Console_bold, stderr, "Stack (%p){\n", stack);
 
-    #define PRINT_VARIABLE_(variable, printfSpecifier) do {\
-                                                            fprintf_color (Console_green,  Console_bold, stderr, "\t%s (%p) = ", #variable, &(variable));\
-                                                            fprintf_color (Console_purple, Console_bold, stderr, printfSpecifier "\n", variable);\
-                                                        }while (0)
+    #define PRINT_VARIABLE_(variable, printfSpecifier)                                                                                              \
+                                                do {                                                                                                \
+                                                    fprintf_color (Console_green,  Console_bold, stderr, "\t%s (%p) = ", #variable, &(variable));   \
+                                                    fprintf_color (Console_purple, Console_bold, stderr, printfSpecifier "\n", variable);           \
+                                                }while (0)
 
     ssize_t capacity = stack->capacity;
     ssize_t size = stack->size;
@@ -195,12 +218,12 @@ void DumpStackData (const Stack *stack){
     fprintf_color (Console_red,   Console_bold, stderr, "}\n");
 }
 
-void StackDump (const Stack *stack, const char *function, const char *file, int line) {
+void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData) {
     custom_assert_without_logger (function != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
 
-    DumpErrors (stack->errorCode, function, file, line);
+    DumpErrors (stack->errorCode, function, file, line, callData);
 
     DumpStackData (stack);
 

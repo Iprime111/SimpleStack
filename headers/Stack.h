@@ -13,15 +13,16 @@ const ssize_t InitialCapacity = 10;
 
 
 #ifndef _NDEBUG
-    #define DumpStack(stack) StackDump (stack, __PRETTY_FUNCTION__, __FILE__, __LINE__)
+    #define DumpStack(stack, stackCallData) StackDump (stack, __PRETTY_FUNCTION__, __FILE__, __LINE__, stackCallData)
 #else
-    #define DumpStack(stack) ;
+    #define DumpStack(stack, stackCallData) ;
 #endif
 
-#define VerifyStack(stack)  do {                                                                                        \
+#define VerifyStack(stack, stackCallData)                                                                               \
+                            do {                                                                                        \
                                 (stack)->errorCode = (StackErrorCode) (StackVerifier (stack) | (stack)->errorCode);     \
                                 if ((stack)->errorCode != no_errors) {                                                  \
-                                    DumpStack (stack);                                                                  \
+                                    DumpStack (stack, stackCallData);                                                   \
                                     RETURN (stack)->errorCode;                                                          \
                                 }                                                                                       \
                             }while (0)
@@ -46,17 +47,28 @@ struct Stack {
     StackErrorCode errorCode;
 };
 
-StackErrorCode StackInit (Stack *stack, ssize_t initialCapacity = InitialCapacity);
+struct StackCallData {
+    const char *function;
+    const char *file;
+
+    const int line;
+
+    const char *variableName;
+};
+
+#define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack}, initialCapacity)
+#define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+
+#define StackDestruct_(stack) StackDestruct (stack)
+
+#define StackPop_(stack, returnValue) StackPop (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+#define StackPush_(stack, value)     StackPush (stack, value,       StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+
+StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity = InitialCapacity);
 StackErrorCode StackDestruct (Stack *stack);
-StackErrorCode StackRealloc (Stack *stack);
 
-StackErrorCode StackPop (Stack *stack, elem_t *return_value);
-StackErrorCode StackPush (Stack *stack, elem_t value);
-
-StackErrorCode StackVerifier (Stack *stack);
-void StackDump (const Stack *stack, const char *function, const char *file, int line);
-void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line);
-void DumpStackData (const Stack *stack);
+StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData);
+StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData);
 
 #endif
 

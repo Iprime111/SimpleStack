@@ -8,22 +8,20 @@ int main (){
 
     Stack test_stack = {};
 
-    StackInit (&test_stack);
-
-
+    StackInitDefault_ (&test_stack);
 
     double test_variable = 1;
 
     for (int i = 0; i < 20; i++){
-        StackPush (&test_stack, test_variable);
+        StackPush_ (&test_stack, test_variable);
     }
-    
+
     test_stack.capacity = -1;
 
-    StackPop (&test_stack, &test_variable);
+    StackPop_ (&test_stack, &test_variable);
 
 
-    StackDestruct (&test_stack);
+    StackDestruct_ (&test_stack);
 
     RETURN 0;
 }
