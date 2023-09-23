@@ -12,11 +12,11 @@ int main (){
 
     double test_variable = 1;
 
-    for (int i = 0; i < 20; i++){
+    for (int i = 0; i < 15; i++){
         StackPush_ (&test_stack, test_variable);
     }
 
-    test_stack.capacity = -1;
+    test_stack.stackHash = 0;
 
     StackPop_ (&test_stack, &test_variable);
 

@@ -1,6 +1,8 @@
 #include <malloc.h>
 
+#include "Logger.h"
 #include "Stack.h"
+#include "StackHash.h"
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
@@ -10,14 +12,63 @@ StackErrorCode StackVerifier (Stack *stack);
 void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
 void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
 void DumpStackData (const Stack *stack);
+size_t getRealCapacity (const Stack *stack);
+size_t getRealAllocSize (const Stack *stack);
+
+#ifdef _USE_CANARY
+    #define leftCanaryPointer  ((canary_t *) stack->data - 1)
+    #define rightCanaryPointer ((canary_t *) (stack->data + stack->capacity))
+
+    const canary_t CanaryNormal = 0xFBADBEEF;
+#endif
+
+#ifdef _USE_HASH
+    #define UpdateHashes(stack, dataSize)                                                                                               \
+                    do{                                                                                                                 \
+                        StackErrorCode hashErrorCode = NO_ERRORS;                                                                       \
+                        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeStackHash (stack, &((stack)->stackHash)));             \
+                        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeDataHash  (stack, dataSize, &((stack)->dataHash)));    \
+                        (stack)->errorCode = (StackErrorCode) (hashErrorCode | (stack)->errorCode);                                     \
+                    }while (0)
+
+#else
+    #define UpdateHashes (stack, dataSize) ;
+
+#endif
 
 StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
+    custom_assert (initialCapacity > 0, invalid_value, INVALID_INPUT);
+    custom_assert (stack, pointer_is_null, INVALID_INPUT);
+
     stack->capacity = initialCapacity;
     stack->size = 0;
-    stack->data = (elem_t *) calloc ((size_t) stack->capacity, sizeof (elem_t));
     stack->errorCode = NO_ERRORS;
+    size_t callocSize =  (size_t) stack->capacity * sizeof (elem_t);
+
+    #ifdef _USE_CANARY
+        callocSize += sizeof (canary_t) * 2;
+
+        stack->rightCanary = CanaryNormal;
+        stack->leftCanary = CanaryNormal;
+    #endif
+
+    stack->data = (elem_t *) calloc (1, callocSize);
+
+    #ifdef _USE_CANARY
+        stack->data = (elem_t *) ((canary_t *) stack->data + 1);
+
+        *leftCanaryPointer  = CanaryNormal;
+        *rightCanaryPointer = CanaryNormal;
+    #endif
+
+    #ifdef _USE_HASH
+        stack->stackHash = 0;
+        stack->dataHash = 0;
+    #endif
+
+    UpdateHashes (stack, callocSize);
 
     VerifyStack (stack, callData);
 
@@ -32,19 +83,23 @@ StackErrorCode StackDestruct (Stack *stack) {
     }
 
     if (stack->data){
-        size_t realStackCapacity = malloc_usable_size (const_cast <elem_t *> (stack->data)) / sizeof (elem_t);
+        size_t realStackCapacity = getRealCapacity (stack);
 
         for (size_t index = 0; index < realStackCapacity; index++){
             stack->data [index] = PoisonValue;
         }
 
-        free (stack->data);
+        #ifdef _USE_CANARY
+            free ((canary_t *) stack->data - 1);
+        #else
+            free (stack->data);
+        #endif
     }
 
     stack->data = NULL;
     stack->capacity = -1;
     stack->size = -1;
-    stack->errorCode = (StackErrorCode) (STACK_POINTER_NULL | DATA_POINTER_NULL | INVALID_CAPACITY_VALUE | ANTI_OVERFLOW | OVERFLOW | INVALID_INPUT | REALLOCATION_ERROR);
+    stack->errorCode = (StackErrorCode) (STACK_POINTER_NULL | DATA_POINTER_NULL | INVALID_CAPACITY_VALUE | ANTI_OVERFLOW | OVERFLOW | INVALID_INPUT | REALLOCATION_ERROR | STACK_CANARY_CORRUPTED);
 
     RETURN NO_ERRORS;
 }
@@ -53,27 +108,43 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     PushLog (3);
     VerifyStack (stack, callData);
 
-    bool shouldRealloc = false;
-
     if (stack->size == stack->capacity){
         stack->capacity *= ReallocationScale;
-        shouldRealloc = true;
-    }
 
-    if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){
+    }else if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){
         stack->capacity /= ReallocationScale;
-        shouldRealloc = true;
+
+    }else{
+        RETURN NO_ERRORS;
     }
 
-    if (shouldRealloc){
-        elem_t *testDataPointer = (elem_t *) realloc (stack->data, (size_t) stack->capacity * sizeof (elem_t));
-        if (!testDataPointer){
-            stack->errorCode = (StackErrorCode) (stack->errorCode | REALLOCATION_ERROR);
-            RETURN stack->errorCode;
-        }
+    size_t reallocSize  = (size_t) stack->capacity * sizeof (elem_t);
 
-        stack->data = testDataPointer;
+    #ifdef _USE_CANARY
+        reallocSize += sizeof (canary_t) * 2;
+        canary_t *reallocPointer = (canary_t *) stack->data - 1;
+    #else
+        elem_t *reallocPointer = stack->data;
+    #endif
+
+    elem_t *testDataPointer = (elem_t *) realloc (reallocPointer,  reallocSize);
+
+    if (!testDataPointer){
+        stack->errorCode = (StackErrorCode) (stack->errorCode | REALLOCATION_ERROR);
+        RETURN stack->errorCode;
     }
+
+    #ifdef _USE_CANARY
+        testDataPointer = (elem_t *) ((canary_t *) testDataPointer + 1);
+    #endif
+
+    stack->data = testDataPointer;
+
+    #ifdef _USE_CANARY
+        *rightCanaryPointer = CanaryNormal;
+    #endif
+
+    UpdateHashes (stack, reallocSize);
 
     VerifyStack (stack, callData);
 
@@ -97,6 +168,8 @@ StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData 
 
     *returnValue = stack->data [--stack->size];
 
+    UpdateHashes (stack, getRealAllocSize(stack));
+
     stack->errorCode = (StackErrorCode) (StackRealloc (stack, callData) | stack->errorCode);
 
     RETURN stack->errorCode;
@@ -110,6 +183,8 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
 
     if (stack->errorCode == NO_ERRORS)
         stack->data [stack->size++] = value;
+
+    UpdateHashes (stack, getRealAllocSize(stack));
 
     RETURN stack->errorCode;
 }
@@ -126,11 +201,37 @@ StackErrorCode StackVerifier (Stack *stack) {
                                             (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
                                         }
 
-    VerifyExpression_ (stack->data,                    DATA_POINTER_NULL);
-    VerifyExpression_ (stack->capacity >= 0,           INVALID_CAPACITY_VALUE);
-    VerifyExpression_ (stack->size >= 0,               ANTI_OVERFLOW);
-    VerifyExpression_ (stack->size <= stack->capacity, OVERFLOW);
+    VerifyExpression_ (stack->data,                        DATA_POINTER_NULL);
+    VerifyExpression_ (stack->capacity >= 0,               INVALID_CAPACITY_VALUE);
+    VerifyExpression_ (stack->size >= 0,                   ANTI_OVERFLOW);
+    VerifyExpression_ (stack->size <= stack->capacity,     OVERFLOW);
 
+    size_t realCapacity = getRealCapacity (stack);
+    size_t allocSize = realCapacity * sizeof (elem_t);
+
+    #ifdef _USE_CANARY
+        VerifyExpression_ (stack->leftCanary == CanaryNormal,  STACK_CANARY_CORRUPTED);
+        VerifyExpression_ (stack->rightCanary == CanaryNormal, STACK_CANARY_CORRUPTED);
+
+
+        if (!(stack->errorCode & DATA_POINTER_NULL)){
+            VerifyExpression_ (*(((canary_t *) stack->data - 1)) == CanaryNormal,               DATA_CANARY_CORRUPTED);
+            VerifyExpression_ (*((canary_t *) (stack->data + realCapacity)) == CanaryNormal,    DATA_CANARY_CORRUPTED);
+        }
+
+        allocSize += 2 * sizeof (canary_t);
+
+    #endif
+
+    #ifdef _USE_HASH
+
+        StackErrorCode stackHashErrorCode = CompareStackHash(stack);
+        StackErrorCode  dataHashErrorCode = CompareDataHash(stack, allocSize);
+
+        VerifyExpression_(stackHashErrorCode == NO_ERRORS, stackHashErrorCode);
+        VerifyExpression_( dataHashErrorCode == NO_ERRORS,  dataHashErrorCode);
+
+    #endif
 
     #undef VerifyExpression_
 
@@ -158,9 +259,13 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
         ERROR_MSG_ (errorCode, STACK_POINTER_NULL,     "Pointer to stack variable has NULL value");
         ERROR_MSG_ (errorCode, DATA_POINTER_NULL,      "Pointer to stack data has NULL value");
         ERROR_MSG_ (errorCode, INVALID_CAPACITY_VALUE, "Stack has invalid capacity");
-        ERROR_MSG_ (errorCode, OVERFLOW,               "Stack OVERFLOW has been occuried");
-        ERROR_MSG_ (errorCode, ANTI_OVERFLOW,          "Stack anti-OVERFLOW has been occuried");
-        ERROR_MSG_ (errorCode, allocation_error,       "Memory reallocation failed");
+        ERROR_MSG_ (errorCode, OVERFLOW,               "Stack overflow has been occuried");
+        ERROR_MSG_ (errorCode, ANTI_OVERFLOW,          "Stack anti-overflow has been occuried");
+        ERROR_MSG_ (errorCode, REALLOCATION_ERROR,     "Memory reallocation failed");
+        ERROR_MSG_ (errorCode, STACK_CANARY_CORRUPTED, "Stack canary has been corrupted");
+        ERROR_MSG_ (errorCode, DATA_CANARY_CORRUPTED,  "Data canary has been corrupted");
+        ERROR_MSG_ (errorCode, WRONG_STACK_HASH,       "Stack has been corrupted");
+        ERROR_MSG_ (errorCode, WRONG_DATA_HASH,        "Data has been corrupted");
 
         #undef  ERROR_MSG_
     }
@@ -183,11 +288,29 @@ void DumpStackData (const Stack *stack){
                                                     fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, printfSpecifier "\n", variable);           \
                                                 }while (0)
 
-    ssize_t capacity = stack->capacity;
-    ssize_t size = stack->size;
+    size_t realStackCapacity = getRealCapacity (stack);
 
-    PRINT_VARIABLE_ (size,     "%lld");
-    PRINT_VARIABLE_ (capacity, "%lld");
+    PRINT_VARIABLE_ (stack->size,              "%lld");
+    PRINT_VARIABLE_ (stack->capacity,          "%lld");
+    PRINT_VARIABLE_ (realStackCapacity,        "%lu");
+
+    #ifdef _USE_CANARY
+        PRINT_VARIABLE_ (stack->leftCanary,        "%x");
+        PRINT_VARIABLE_ (stack->rightCanary,       "%x");
+    #endif
+
+    #ifdef _USE_CANARY
+        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "leftDataCanary", leftCanaryPointer);
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *leftCanaryPointer);
+
+        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "rightDataCanary", rightCanaryPointer);
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *rightCanaryPointer);
+    #endif
+
+    #ifdef _USE_HASH
+        PRINT_VARIABLE_(stack->stackHash, "%llu");
+        PRINT_VARIABLE_(stack->dataHash,  "%llu");
+    #endif
 
     #undef PRINT_VARIABLE_
 
@@ -199,8 +322,6 @@ void DumpStackData (const Stack *stack){
 
         return;
     }
-
-    size_t realStackCapacity = malloc_usable_size (const_cast <elem_t *> (stack->data)) / sizeof (elem_t);
 
     for (size_t index = 0; index < realStackCapacity; index++){
         CONSOLE_COLOR dataColor = CONSOLE_RED;
@@ -223,7 +344,7 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
 
-    DumpErrors (stack->errorCode, function, file, line, callData);
+    DumpErrors ((stack ? stack->errorCode : STACK_POINTER_NULL), function, file, line, callData);
 
     DumpStackData (stack);
 
@@ -231,4 +352,32 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
 
     Show_stack_trace ();
 
+}
+
+size_t getRealAllocSize (const Stack *stack){
+    PushLog (3);
+
+    if (stack == NULL || stack->data == NULL){
+        RETURN 0;
+    }
+
+    #ifdef _USE_CANARY
+        RETURN malloc_usable_size ((canary_t *) (const_cast <elem_t *> (stack->data)) - 1);
+    #else
+        RETURN malloc_usable_size (const_cast <elem_t *> (stack->data));
+    #endif
+}
+
+size_t getRealCapacity (const Stack *stack){
+    PushLog (3);
+
+    if (stack == NULL || stack->data == NULL){
+        RETURN 0;
+    }
+
+    #ifdef _USE_CANARY
+        RETURN (getRealAllocSize(stack) - 2 * sizeof (canary_t)) / sizeof (elem_t);
+    #else
+        RETURN getRealAllocSize(stack) / sizeof (elem_t);
+    #endif
 }
