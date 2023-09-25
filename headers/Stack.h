@@ -13,6 +13,12 @@ const ssize_t InitialCapacity = 10;
 
 #ifdef _USE_CANARY
     typedef unsigned long long canary_t;
+
+    // TODO pass stack as arg
+    #define leftCanaryPointer  ((canary_t *) stack->data - 1)
+    #define rightCanaryPointer ((canary_t *) (stack->data + stack->capacity))
+
+    const canary_t CanaryNormal = 0xFBADBEEF;
 #endif
 
 #ifndef _NDEBUG
@@ -21,14 +27,16 @@ const ssize_t InitialCapacity = 10;
     #define DumpStack(stack, stackCallData) ;
 #endif
 
-#define VerifyStack(stack, stackCallData)                                                                                                                                               \
-                            do {                                                                                                                                                        \
-                                StackErrorCode returnedError_ = StackVerifier (stack);                                                                                                  \
-                                if (returnedError_ != NO_ERRORS || ((stack) != NULL && (((stack)->errorCode = (StackErrorCode) (stack->errorCode | returnedError_)) != NO_ERRORS))) {   \
-                                    DumpStack (stack, stackCallData);                                                                                                                   \
-                                    RETURN (stack ? (stack)->errorCode : returnedError_);                                                                                               \
-                                }                                                                                                                                                       \
-                            }while (0)
+
+
+#define VerifyStack(stack, stackCallData)                                                                                                                       \
+    do {                                                                                                                                                        \
+        StackErrorCode returnedError_ = StackVerifier (stack);                                                                                                  \
+        if (returnedError_ != NO_ERRORS || ((stack) != NULL && (((stack)->errorCode = (StackErrorCode) (stack->errorCode | returnedError_)) != NO_ERRORS))) {   \
+            DumpStack (stack, stackCallData);                                                                                                                   \
+            RETURN (stack ? (stack)->errorCode : returnedError_);                                                                                               \
+        }                                                                                                                                                       \
+    }while (0)
 
 enum StackErrorCode {
     NO_ERRORS              = 0,
@@ -43,6 +51,8 @@ enum StackErrorCode {
     DATA_CANARY_CORRUPTED  = 1 << 8,
     WRONG_DATA_HASH        = 1 << 9,
     WRONG_STACK_HASH       = 1 << 10,
+    SECURITY_PROCESS_ERROR = 1 << 11,
+    EXTERNAL_VERIFY_FAILED = 1 << 12,
 };
 
 struct Stack {
@@ -74,22 +84,24 @@ struct StackCallData {
     const int line;
 
     const char *variableName;
+
+    bool showDump;
 };
 
 #ifdef _USE_CANARY
-    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack}, initialCapacity)
-    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
+    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 #else
-    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack}, initialCapacity)
-    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
+    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 #endif
 
 
 
 #define StackDestruct_(stack) StackDestruct (stack)
 
-#define StackPop_(stack, returnValue) StackPop (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
-#define StackPush_(stack, value)     StackPush (stack, value,       StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack})
+#define StackPop_(stack, returnValue) StackPop (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackPush_(stack, value)     StackPush (stack, value,       StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
 StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity = InitialCapacity);
 StackErrorCode StackDestruct (Stack *stack);

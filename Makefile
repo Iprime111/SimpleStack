@@ -1,7 +1,7 @@
 srcDir = src
 outDir = build
 libDirs = headers CustomAssert/headers CustomAssert/ColorConsole/headers
-sources = main.cpp Stack.cpp StackHash.cpp
+sources = main.cpp Stack.cpp StackHash.cpp SecureStack.cpp
 target = Stack
 
 ifndef buildDir_Stack

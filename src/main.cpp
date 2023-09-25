@@ -2,8 +2,10 @@
 
 #include "CustomAssert.h"
 #include "Stack.h"
+#include "SecureStack.h"
 
-int main (){
+//TODO use alingment
+int main() {
     PushLog (1);
 
     Stack test_stack = {};
@@ -12,11 +14,12 @@ int main (){
 
     double test_variable = 1;
 
+    // TODO unit tets on Gtests
     for (int i = 0; i < 15; i++){
         StackPush_ (&test_stack, test_variable);
     }
 
-    test_stack.stackHash = 0;
+    //test_stack.stackHash = 0;
 
     StackPop_ (&test_stack, &test_variable);
 

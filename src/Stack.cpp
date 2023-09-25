@@ -6,33 +6,27 @@
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
-StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
+static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
 
-StackErrorCode StackVerifier (Stack *stack);
-void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
-void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
-void DumpStackData (const Stack *stack);
-size_t getRealCapacity (const Stack *stack);
-size_t getRealAllocSize (const Stack *stack);
-
-#ifdef _USE_CANARY
-    #define leftCanaryPointer  ((canary_t *) stack->data - 1)
-    #define rightCanaryPointer ((canary_t *) (stack->data + stack->capacity))
-
-    const canary_t CanaryNormal = 0xFBADBEEF;
-#endif
+static StackErrorCode StackVerifier (Stack *stack);
+static void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
+static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
+static void DumpStackData (const Stack *stack);
+static size_t getRealCapacity (const Stack *stack);
+static size_t getRealAllocSize (const Stack *stack);
+static void UpdateHashes (Stack *stack, size_t dataSize);
 
 #ifdef _USE_HASH
-    #define UpdateHashes(stack, dataSize)                                                                                               \
-                    do{                                                                                                                 \
-                        StackErrorCode hashErrorCode = NO_ERRORS;                                                                       \
-                        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeStackHash (stack, &((stack)->stackHash)));             \
-                        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeDataHash  (stack, dataSize, &((stack)->dataHash)));    \
-                        (stack)->errorCode = (StackErrorCode) (hashErrorCode | (stack)->errorCode);                                     \
-                    }while (0)
+
+    void UpdateHashes (Stack *stack, size_t dataSize) {
+        StackErrorCode hashErrorCode = NO_ERRORS;
+        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeStackHash (stack, &((stack)->stackHash)));
+        hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeDataHash  (stack, dataSize, &((stack)->dataHash)));
+        (stack)->errorCode = (StackErrorCode) (hashErrorCode | (stack)->errorCode);
+    }
 
 #else
-    #define UpdateHashes (stack, dataSize) ;
+    void UpdateHashes (Stack *stack, size_t dataSize) {}
 
 #endif
 
@@ -90,7 +84,7 @@ StackErrorCode StackDestruct (Stack *stack) {
         }
 
         #ifdef _USE_CANARY
-            free ((canary_t *) stack->data - 1);
+            free (leftCanaryPointer);
         #else
             free (stack->data);
         #endif
@@ -111,7 +105,7 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     if (stack->size == stack->capacity){
         stack->capacity *= ReallocationScale;
 
-    }else if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){
+    }else if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){ // TODO think about integer division
         stack->capacity /= ReallocationScale;
 
     }else{
@@ -154,8 +148,6 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
 StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
-    custom_assert (returnValue != NULL, pointer_is_null, INVALID_INPUT);
-
     VerifyStack (stack, callData);
 
     if (stack->size == 0){
@@ -166,7 +158,11 @@ StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData 
         RETURN stack->errorCode;
     }
 
-    *returnValue = stack->data [--stack->size];
+    stack->size--;
+
+    if (returnValue){
+        *returnValue = stack->data [stack->size];
+    }
 
     UpdateHashes (stack, getRealAllocSize(stack));
 
@@ -189,6 +185,7 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
     RETURN stack->errorCode;
 }
 
+// TODO pointer verify
 StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
 
@@ -196,10 +193,10 @@ StackErrorCode StackVerifier (Stack *stack) {
         RETURN STACK_POINTER_NULL;
     }
 
-    #define VerifyExpression_(errorExp, patternErrorCode)                                                                   \
-                                        if (!(errorExp)) {                                                                  \
-                                            (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
-                                        }
+    #define VerifyExpression_(errorExp, patternErrorCode)                                   \
+        if (!(errorExp)) {                                                                  \
+            (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
+        }
 
     VerifyExpression_ (stack->data,                        DATA_POINTER_NULL);
     VerifyExpression_ (stack->capacity >= 0,               INVALID_CAPACITY_VALUE);
@@ -251,10 +248,10 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
     if (errorCode == NO_ERRORS){
         fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "No errors have been registered\n");
     }else{
-        #define ERROR_MSG_(error, errorPattern, message)                                                                                \
-                                            if (error & errorPattern){                                                                  \
-                                                fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "%s: %s\n", #errorPattern, message);\
-                                            }
+        #define ERROR_MSG_(error, errorPattern, message)                                                \
+            if (error & errorPattern){                                                                  \
+                fprintf_color (CONSOLE_WHITE, CONSOLE_BOLD, stderr, "%s: %s\n", #errorPattern, message);\
+            }
 
         ERROR_MSG_ (errorCode, STACK_POINTER_NULL,     "Pointer to stack variable has NULL value");
         ERROR_MSG_ (errorCode, DATA_POINTER_NULL,      "Pointer to stack data has NULL value");
@@ -282,11 +279,11 @@ void DumpStackData (const Stack *stack){
 
     fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Stack (%p){\n", stack);
 
-    #define PRINT_VARIABLE_(variable, printfSpecifier)                                                                                              \
-                                                do {                                                                                                \
-                                                    fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", #variable, &(variable));   \
-                                                    fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, printfSpecifier "\n", variable);           \
-                                                }while (0)
+    #define PRINT_VARIABLE_(variable, printfSpecifier)                                                      \
+        do {                                                                                                \
+            fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", #variable, &(variable));   \
+            fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, printfSpecifier "\n", variable);           \
+        }while (0)
 
     size_t realStackCapacity = getRealCapacity (stack);
 
@@ -330,6 +327,12 @@ void DumpStackData (const Stack *stack){
             dataColor = CONSOLE_GREEN;
 
         fprintf_color (dataColor,     CONSOLE_NORMAL, stderr, "\t\tdata [%lu] (%p) = ", index, stack->data + index);
+
+        // TODO user print function
+        // if (stack->print_func) {
+        //     ...
+        // }
+        // else ....
         fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, ElementPrintfSpecifier "\n", stack->data [index]);
 
     }
@@ -343,6 +346,9 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
     custom_assert_without_logger (function != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
+
+    if (!callData.showDump)
+        return;
 
     DumpErrors ((stack ? stack->errorCode : STACK_POINTER_NULL), function, file, line, callData);
 
@@ -381,3 +387,26 @@ size_t getRealCapacity (const Stack *stack){
         RETURN getRealAllocSize(stack) / sizeof (elem_t);
     #endif
 }
+
+
+// TODO
+// template <typename T>
+// void print_data(T) {
+//     printf("%x", ....);
+// }
+//
+// template <>
+// void print_data(int data) {
+//     printf("%d\n", data);
+// }
+//
+// template <>
+// void print_data(double data) {
+//     printf("%lf\n", data);
+// }
+//
+// template <>
+// void print_data(mat_v_kanave data) {
+//     ....
+// }
+//

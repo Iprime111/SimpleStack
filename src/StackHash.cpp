@@ -1,8 +1,12 @@
 #include "StackHash.h"
 #include "Logger.h"
 #include <cstdio>
+#include <iostream>
+#include <stdexcept>
 
-unsigned long long HashFunction (char *array, size_t length);
+static unsigned long long HashFunction (char *array, size_t length);
+
+#ifdef _USE_HASH
 
 StackErrorCode CompareStackHash (Stack *stack){
     PushLog (3);
@@ -86,7 +90,7 @@ StackErrorCode ComputeDataHash (Stack *stack, size_t dataLength, hash_t *hash) {
     }
 
     #ifdef _USE_CANARY
-        canary_t *dataPointer = (canary_t *) stack->data - 1;
+        canary_t *dataPointer = leftCanaryPointer;
     #else
         elem_t   *dataPointer = stack->data;
     #endif
@@ -107,3 +111,4 @@ hash_t HashFunction (char *array, size_t length) {
 
     RETURN hash;
 }
+#endif
