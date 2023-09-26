@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 
 #include "ColorConsole.h"
 #include "CustomAssert.h"
@@ -15,7 +17,7 @@ typedef StackErrorCode CallbackFunction_t (const char *command);
 
 const int SleepTime = 1000;
 
-static int SecurityProcessDescriptor = -1;
+static int SecurityProcessPid = -1;
 static int CommandPipe  [2] = {-1, -1};
 static int ResponsePipe [2] = {-1, -1};
 
@@ -61,13 +63,13 @@ StackErrorCode SecurityProcessInit (){
         return SECURITY_PROCESS_ERROR;
     }
 
-    SecurityProcessDescriptor = fork ();
+    SecurityProcessPid = fork ();
 
-    if (SecurityProcessDescriptor < 0){
+    if (SecurityProcessPid < 0){
         fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while forking\n");
 
         return SECURITY_PROCESS_ERROR;
-    }else if (SecurityProcessDescriptor == 0){
+    }else if (SecurityProcessPid == 0){
 
         if (close (ResponsePipe [0])){
             fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing response pipe\n");
@@ -106,6 +108,8 @@ StackErrorCode SecurityProcessInit (){
 
         StackBackups = (Stack *) calloc (MAX_STACKS_COUNT, sizeof (Stack));
 
+        fprintf (stderr, "Current process PID: %d\nSecurity process PID: %d\n", getpid (), SecurityProcessPid);
+
         return NO_ERRORS;
     }
 
@@ -113,11 +117,15 @@ StackErrorCode SecurityProcessInit (){
 
 StackErrorCode SecurityProcessDestruct (const char *command) {
 
+    fprintf (stderr, "Destroying security process...\n");
+
     for (size_t stackIndex = 0; stackIndex < StackCount; stackIndex++){
         StackDestruct (GetStackFromDescriptor ((int) stackIndex));
     }
 
     free (StackBackups);
+
+    WriteCommandResponse (OPERATION_SUCCESS);
 
     if (close (ResponsePipe [1])){
         fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing response pipe\n");
@@ -131,7 +139,8 @@ StackErrorCode SecurityProcessDestruct (const char *command) {
         return SECURITY_PROCESS_ERROR;
     }
 
-    abort ();
+    fprintf (stderr, "Aborting security process...\n");
+    exit (0);
     return NO_ERRORS;
 }
 
@@ -146,7 +155,8 @@ StackErrorCode SecurityProcessBackupLoop (){
     StackCommand command = UNKNOWN_COMMAND;
 
     do{
-        read (CommandPipe [0], commandBuffer, sizeof (commandBuffer));
+        if (read (CommandPipe [0], commandBuffer, sizeof (commandBuffer)) == 0)
+            continue;
 
         command = ExtractCommand (commandBuffer);
 
@@ -160,11 +170,16 @@ StackErrorCode SecurityProcessBackupLoop (){
         COMMAND_ (ABORT_PROCESS,          SecurityProcessDestruct);
 
         StackErrorCode errorCode = NO_ERRORS;
+
+        if (callbackFunction == NULL)
+            continue;
+
         if ((errorCode = callbackFunction (commandBuffer)) != NO_ERRORS){
             return errorCode;
+        }else {
+            fprintf (stderr, "Command %d executed\n", command);
+            callbackFunction = NULL;
         }
-
-        usleep (SleepTime);
 
     }while (command != ABORT_PROCESS);
 
@@ -185,6 +200,8 @@ StackCommand ExtractCommand (const char *buffer) {
 }
 
 StackErrorCode StackInitSecureProcess (const char *command) {
+    fprintf (stderr, "Command executed (secure init)\n");
+
     if (StackCount >= MAX_STACKS_COUNT){
         WriteCommandResponse (OPERATION_FAILED);
 
@@ -207,6 +224,7 @@ StackErrorCode StackInitSecureProcess (const char *command) {
 }
 
 StackErrorCode StackDestructSecureProcess (const char *command) {
+    fprintf (stderr, "Command executed (secure destruct)\n");
 
     StackErrorCode errorCode = StackDestruct (GetStackFromCommand (command));
 
@@ -216,6 +234,7 @@ StackErrorCode StackDestructSecureProcess (const char *command) {
 }
 
 StackErrorCode StackPopSecureProcess (const char *command) {
+    fprintf (stderr, "Command executed (secure pop)\n");
 
     StackErrorCode errorCode =  StackPop (GetStackFromCommand (command), NULL, {"","", 0, "", false});
 
@@ -225,6 +244,8 @@ StackErrorCode StackPopSecureProcess (const char *command) {
 }
 
 StackErrorCode StackPushSecureProcess (const char *command) {
+    fprintf (stderr, "Command executed (secure push)\n");
+
     int stackDescriptor = 0;
     elem_t value = PoisonValue;
 
@@ -298,6 +319,19 @@ void WriteCommandResponse (StackCommandResponse response) {
 
 #define WriteError(errorStack, function) (errorStack)->errorCode = (StackErrorCode) (ResponseToError (function) | (errorStack)->errorCode)
 
+StackErrorCode SecurityProcessStop () {
+    PushLog (2);
+
+    CallBackupOperation (-1, ABORT_PROCESS, NULL, 0);
+
+    fprintf (stderr, "Waiting for security process to stop\n");
+
+    wait (NULL);
+
+    fprintf (stderr, "Wait passed\n");
+    RETURN NO_ERRORS;
+}
+
 StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
@@ -319,6 +353,21 @@ StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssiz
     EncryptStackAddress(StackBackups + StackCount, stack, descriptor);
 
     RETURN (StackBackups + StackCount)->errorCode;
+}
+
+StackErrorCode StackDestructSecure (Stack *stack){
+    PushLog (2);
+
+    custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
+
+    int descriptor = -1;
+
+    Stack *realStack = DecryptStackAddress (stack, &descriptor);
+
+    StackErrorCode errorCode = StackDestruct (realStack);
+    errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, NULL, 0)) | errorCode);
+
+    RETURN errorCode;
 }
 
 StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData) {
