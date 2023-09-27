@@ -8,8 +8,8 @@
 static unsigned long long HashFunction (char *array, size_t length);
 
 #ifdef _USE_HASH
-template <typename elem_t>
-StackErrorCode CompareStackHash (Stack <elem_t> *stack){
+
+StackErrorCode CompareStackHash (Stack *stack){
     PushLog (3);
 
     if (!stack){
@@ -34,8 +34,8 @@ StackErrorCode CompareStackHash (Stack <elem_t> *stack){
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode CompareDataHash (Stack <elem_t> *stack, size_t dataLength) {
+
+StackErrorCode CompareDataHash (Stack *stack, size_t dataLength) {
     PushLog (3);
 
     if (!stack){
@@ -57,8 +57,8 @@ StackErrorCode CompareDataHash (Stack <elem_t> *stack, size_t dataLength) {
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode ComputeStackHash (Stack <elem_t> *stack, hash_t *hash) {
+
+StackErrorCode ComputeStackHash (Stack *stack, hash_t *hash) {
     PushLog (3);
 
     if (!stack){
@@ -71,7 +71,7 @@ StackErrorCode ComputeStackHash (Stack <elem_t> *stack, hash_t *hash) {
     stack->dataHash  = 0;
     stack->stackHash = 0;
 
-    *hash = HashFunction((char *) stack, sizeof (Stack <elem_t>));
+    *hash = HashFunction((char *) stack, sizeof (Stack));
 
     if (hash != &(stack->stackHash))
         stack->stackHash = stackHash;
@@ -81,8 +81,8 @@ StackErrorCode ComputeStackHash (Stack <elem_t> *stack, hash_t *hash) {
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode ComputeDataHash (Stack <elem_t> *stack, size_t dataLength, hash_t *hash) {
+
+StackErrorCode ComputeDataHash (Stack *stack, size_t dataLength, hash_t *hash) {
     PushLog (3);
 
     if (!stack){

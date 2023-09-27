@@ -5,14 +5,14 @@
 
 typedef unsigned long long hash_t;
 
-template <typename elem_t>
-StackErrorCode CompareStackHash (Stack <elem_t> *stk);
-template <typename elem_t>
-StackErrorCode CompareDataHash (Stack <elem_t> *stk, size_t dataLength);
 
-template <typename elem_t>
-StackErrorCode ComputeStackHash (Stack <elem_t> *stack, hash_t *hash);
-template <typename elem_t>
-StackErrorCode ComputeDataHash (Stack <elem_t> *stack, size_t dataLength, hash_t *hash);
+StackErrorCode CompareStackHash (Stack *stk);
+
+StackErrorCode CompareDataHash (Stack *stk, size_t dataLength);
+
+
+StackErrorCode ComputeStackHash (Stack *stack, hash_t *hash);
+
+StackErrorCode ComputeDataHash (Stack *stack, size_t dataLength, hash_t *hash);
 
 #endif

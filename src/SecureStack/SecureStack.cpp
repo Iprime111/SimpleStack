@@ -6,6 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 
 #include "ColorConsole.h"
@@ -13,69 +14,65 @@
 #include "SecureStack/SecureStack.h"
 #include "Logger.h"
 
-typedef StackErrorCode CallbackFunction_t (const char *command);
+typedef StackErrorCode CallbackFunction_t ();
 
-const int SleepTime = 1000;
+static const unsigned int CycleSleepTime = 1;
 
 static int SecurityProcessPid = -1;
-static int CommandPipe  [2] = {-1, -1};
-static int ResponsePipe [2] = {-1, -1};
+static StackOperationRequest *requestMemory = NULL;
 
 static size_t StackCount = 0;
 static void *StackBackups = NULL;
 
 //-----------------------CHILD PROCESS PROTOTYPES----------------
 
-static StackErrorCode SecurityProcessDestruct (const char *command);
+StackOperationRequest *CreateSharedMemory (size_t size);
 
-template <typename elem_t>
+static StackErrorCode SecurityProcessDestruct ();
+
+
 static StackErrorCode SecurityProcessBackupLoop ();
-static StackCommand ExtractCommand (const char *buffer);
 
-template <typename elem_t>
-static StackErrorCode StackPopSecureProcess      (const char *command);
-template <typename elem_t>
-static StackErrorCode StackPushSecureProcess     (const char *command);
-template <typename elem_t>
-static StackErrorCode StackInitSecureProcess     (const char *command);
-template <typename elem_t>
-static StackErrorCode StackDestructSecureProcess (const char *command);
-template <typename elem_t>
-static StackErrorCode VerifyStackSecureProcess   (const char *command);
 
-template <typename elem_t>
-static Stack <elem_t> *GetStackFromDescriptor (int stackDescriptor);
-template <typename elem_t>
-static Stack <elem_t> *GetStackFromCommand    (const char *command);
-static size_t GetStackDescriptor     (const char *command, int *descriptor);
+static StackErrorCode StackPopSecureProcess      ();
+
+static StackErrorCode StackPushSecureProcess     ();
+
+static StackErrorCode StackInitSecureProcess     ();
+
+static StackErrorCode StackDestructSecureProcess ();
+
+static StackErrorCode VerifyStackSecureProcess   ();
+
+
+static Stack *GetStackFromDescriptor (int stackDescriptor);
 
 static void WriteCommandResponse (StackCommandResponse response);
 static void WriteResult (StackErrorCode errorCode);
 
 //------------------PARENT PROCESS PROTOTYPES--------------------
 
-static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, void *arguments, size_t argumentsSize);
+static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument);
 StackErrorCode ResponseToError (StackCommandResponse response);
-template <typename elem_t>
-static void EncryptStackAddress (Stack <elem_t> *stack, Stack <elem_t> *outPointer, int descriptor);
-template <typename elem_t>
-static Stack <elem_t> *DecryptStackAddress (Stack <elem_t> *stack, int *descriptor);
+
+static void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor);
+
+static Stack *DecryptStackAddress (Stack *stack, int *descriptor);
 
 //-------------Child process part----------------------
-template <typename elem_t>
-StackErrorCode SecurityProcessInit (int *){
 
-    if (pipe (CommandPipe) < 0){
-        fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while creating pipe\n");
+StackOperationRequest *CreateSharedMemory (size_t size){
+    StackOperationRequest *memory = (StackOperationRequest *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
-        return SECURITY_PROCESS_ERROR;
-    }
+    memory->stackDescriptor = -1;
+    memory->response = OPERATION_FAILED;
+    memory->command = UNKNOWN_COMMAND;
 
-    if (pipe (ResponsePipe) < 0){
-        fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while creating pipe\n");
+    return memory;
+}
 
-        return SECURITY_PROCESS_ERROR;
-    }
+StackErrorCode SecurityProcessInit (){
+    requestMemory = CreateSharedMemory (sizeof (StackOperationRequest));
 
     SecurityProcessPid = fork ();
 
@@ -85,42 +82,18 @@ StackErrorCode SecurityProcessInit (int *){
         return SECURITY_PROCESS_ERROR;
     }else if (SecurityProcessPid == 0){
 
-        if (close (ResponsePipe [0])){
-            fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing response pipe\n");
-
-            return SECURITY_PROCESS_ERROR;
-        }
-
-        if (close (CommandPipe [1])){
-            fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing command pipe\n");
-
-            return SECURITY_PROCESS_ERROR;
-        }
-
-        StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack <elem_t>));
+        StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack));
 
         if (!StackBackups){
             return SECURITY_PROCESS_ERROR;
         }
 
-        SecurityProcessBackupLoop <elem_t> ();
+        SecurityProcessBackupLoop ();
 
         return NO_ERRORS;
     }else{
 
-        if (close (ResponsePipe [1])){
-            fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing response pipe\n");
-
-            return SECURITY_PROCESS_ERROR;
-        }
-
-        if (close (CommandPipe [0])){
-            fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing command pipe\n");
-
-            return SECURITY_PROCESS_ERROR;
-        }
-
-        StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack <elem_t>));
+        StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack));
 
         fprintf (stderr, "Current process PID: %d\nSecurity process PID: %d\n", getpid (), SecurityProcessPid);
 
@@ -129,94 +102,84 @@ StackErrorCode SecurityProcessInit (int *){
 
 }
 
-template <typename elem_t>
-StackErrorCode SecurityProcessDestruct (const char *command) {
+
+StackErrorCode SecurityProcessDestruct () {
 
     fprintf (stderr, "Destroying security process...\n");
 
     for (size_t stackIndex = 0; stackIndex < StackCount; stackIndex++){
-        StackDestruct (GetStackFromDescriptor <elem_t> ((int) stackIndex));
+        StackDestruct (GetStackFromDescriptor ((int) stackIndex));
     }
 
     free (StackBackups);
 
     WriteCommandResponse (OPERATION_SUCCESS);
 
-    if (close (ResponsePipe [1])){
-        fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing response pipe\n");
-
-        return SECURITY_PROCESS_ERROR;
-    }
-
-    if (close (CommandPipe [0])){
-        fprintf_color (CONSOLE_RED, CONSOLE_NORMAL, stderr, "Error occuried while closing command pipe\n");
-
-        return SECURITY_PROCESS_ERROR;
+    if (munmap (requestMemory, sizeof (StackOperationRequest)) != 0){
+        fprintf (stderr, "Memory deallocation error\n");
     }
 
     fprintf (stderr, "Aborting security process...\n");
+
     exit (0);
     return NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode SecurityProcessBackupLoop (){
-    char commandBuffer [PIPE_BUFFER_SIZE] = "";
 
-    #define COMMAND_(targetCommand, callback)   \
-        if (targetCommand == command){          \
-            callbackFunction = callback;        \
+StackErrorCode SecurityProcessBackupLoop (){
+
+    #define COMMAND_(targetCommand, callback)                       \
+        if (targetCommand == requestMemory->command){               \
+            callbackFunction = callback;                            \
+            fprintf (stderr, "Command %s found\n", #targetCommand); \
         }
 
-    StackCommand command = UNKNOWN_COMMAND;
 
     do{
-        if (read (CommandPipe [0], commandBuffer, sizeof (commandBuffer)) == 0)
+        if (requestMemory->response != OPERATION_PROCESSING)
             continue;
 
-        command = ExtractCommand (commandBuffer);
+
+        fprintf (stderr, "Something is received: %d\n", requestMemory->command);
 
         CallbackFunction_t *callbackFunction = NULL;
 
-        COMMAND_ (STACK_PUSH_COMMAND,     StackPushSecureProcess     <elem_t>);
-        COMMAND_ (STACK_POP_COMMAND,      StackPopSecureProcess      <elem_t>);
-        COMMAND_ (STACK_INIT_COMMAND,     StackInitSecureProcess     <elem_t>);
-        COMMAND_ (STACK_DESTRUCT_COMMAND, StackDestructSecureProcess <elem_t>);
-        COMMAND_ (STACK_VERIFY_COMMAND,   VerifyStackSecureProcess   <elem_t>);
-        COMMAND_ (ABORT_PROCESS,          SecurityProcessDestruct    <elem_t>);
+        COMMAND_ (STACK_PUSH_COMMAND,     StackPushSecureProcess     );
+        COMMAND_ (STACK_POP_COMMAND,      StackPopSecureProcess      );
+        COMMAND_ (STACK_INIT_COMMAND,     StackInitSecureProcess     );
+        COMMAND_ (STACK_DESTRUCT_COMMAND, StackDestructSecureProcess );
+        COMMAND_ (STACK_VERIFY_COMMAND,   VerifyStackSecureProcess   );
+        COMMAND_ (ABORT_PROCESS,          SecurityProcessDestruct    );
+
+        if (requestMemory->command == UNKNOWN_COMMAND){
+            fprintf (stderr, "something gone wrong\n");
+            WriteCommandResponse (OPERATION_FAILED);
+        }
 
         StackErrorCode errorCode = NO_ERRORS;
 
         if (callbackFunction == NULL)
             continue;
 
-        if ((errorCode = callbackFunction (commandBuffer)) != NO_ERRORS){
+        if ((errorCode = callbackFunction ()) != NO_ERRORS){
             return errorCode;
         }else {
-            fprintf (stderr, "Command %d executed\n", command);
+            fprintf (stderr, "Command %d executed\n", requestMemory->command);
             callbackFunction = NULL;
         }
 
-    }while (command != ABORT_PROCESS);
+        usleep (CycleSleepTime);
+
+    }while (requestMemory->command != ABORT_PROCESS);
+
+    exit (0);
 
     #undef COMMAND_
 
     return NO_ERRORS;
 }
 
-StackCommand ExtractCommand (const char *buffer) {
-    StackCommand command = UNKNOWN_COMMAND;
-    char *commandPointer = (char *) &command;
-
-    for (size_t byteIndex = 0; byteIndex < sizeof (StackCommand); byteIndex++){
-        commandPointer [byteIndex] = buffer [byteIndex];
-    }
-
-    return command;
-}
-
-template <typename elem_t>
-StackErrorCode StackInitSecureProcess (const char *command) {
+StackErrorCode StackInitSecureProcess () {
     fprintf (stderr, "Command executed (secure init)\n");
 
     if (StackCount >= MAX_STACKS_COUNT){
@@ -225,12 +188,12 @@ StackErrorCode StackInitSecureProcess (const char *command) {
         return SECURITY_PROCESS_ERROR;
     }
 
-    StackErrorCode errorCode = StackInit ((Stack <elem_t> *) StackBackups + StackCount, {"", "", 0, "", false});
+    StackErrorCode errorCode = StackInit ((Stack *) StackBackups + StackCount, {"", "", 0, "", false});
 
     if (errorCode == NO_ERRORS) {
         WriteCommandResponse (OPERATION_SUCCESS);
 
-        write (ResponsePipe [1], (char *) &StackCount, sizeof (size_t));
+        requestMemory->stackDescriptor = (int) StackCount;
 
         StackCount++;
     }else {
@@ -240,88 +203,47 @@ StackErrorCode StackInitSecureProcess (const char *command) {
     return errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackDestructSecureProcess (const char *command) {
+
+StackErrorCode StackDestructSecureProcess () {
     fprintf (stderr, "Command executed (secure destruct)\n");
 
-    StackErrorCode errorCode = StackDestruct (GetStackFromCommand <elem_t> (command));
+    StackErrorCode errorCode = StackDestruct (GetStackFromDescriptor (requestMemory->stackDescriptor));
 
     WriteResult (errorCode);
 
     return errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPopSecureProcess (const char *command) {
+
+StackErrorCode StackPopSecureProcess () {
     fprintf (stderr, "Command executed (secure pop)\n");
 
-    StackErrorCode errorCode =  StackPop (GetStackFromCommand <elem_t> (command), NULL, {"","", 0, "", false});
+    StackErrorCode errorCode =  StackPop (GetStackFromDescriptor (requestMemory->stackDescriptor), NULL, {"","", 0, "", false});
 
     WriteResult (errorCode);
 
     return errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPushSecureProcess (const char *command) {
+
+StackErrorCode StackPushSecureProcess () {
     fprintf (stderr, "Command executed (secure push)\n");
 
-    int stackDescriptor = 0;
-    elem_t value{};
-
-    char *valuePointer = (char *) &value;
-
-    size_t descriptorIndex = GetStackDescriptor(command, &stackDescriptor);
-
-    for (size_t elementIndex = 0; elementIndex < sizeof (elem_t); elementIndex++) {
-        valuePointer [elementIndex] = command [elementIndex + descriptorIndex];
-    }
-
-    Stack <elem_t> *stack = GetStackFromDescriptor <elem_t> (stackDescriptor);
-
-    StackErrorCode errorCode = StackPush (stack, value, {"","", 0, "", false});
+    StackErrorCode errorCode = StackPush (GetStackFromDescriptor (requestMemory->stackDescriptor), requestMemory->argument, {"","", 0, "", false});
 
     WriteResult (errorCode);
 
     return errorCode;
 }
 
-StackErrorCode VerifyStackSecureProcess (const char *command){
+StackErrorCode VerifyStackSecureProcess (){
     WriteCommandResponse (OPERATION_SUCCESS);
 
     return NO_ERRORS;
 }
 
-size_t GetStackDescriptor (const char *command, int *descriptor){
-    size_t stringIndex = 0;
-
-    while (command [stringIndex] != '\0'){
-        stringIndex++;
-    }
-
-    stringIndex++;
-
-    char *descriptorPointer = (char *) descriptor;
-    size_t descriptorIndex = 0;
-
-    for (descriptorIndex = 0; descriptorIndex < 4; descriptorIndex++){
-        descriptorPointer [descriptorIndex] = command [descriptorIndex + stringIndex];
-    }
-
-    return stringIndex + descriptorIndex;
-}
-
-template <typename elem_t>
-Stack <elem_t> *GetStackFromDescriptor (int stackDescriptor){
-    return (Stack <elem_t> *) StackBackups + stackDescriptor;
-}
-
-template <typename elem_t>
-Stack <elem_t> *GetStackFromCommand (const char *command){
-    int stackDescriptor = 0;
-    GetStackDescriptor(command, &stackDescriptor);
-
-    return GetStackFromDescriptor <elem_t> (stackDescriptor);
+Stack *GetStackFromDescriptor (int stackDescriptor){
+    return (Stack *) StackBackups + stackDescriptor;
 }
 
 void WriteResult (StackErrorCode errorCode) {
@@ -334,137 +256,132 @@ void WriteResult (StackErrorCode errorCode) {
 }
 
 void WriteCommandResponse (StackCommandResponse response) {
-    write (ResponsePipe [1], &response, sizeof (StackCommandResponse));
+    requestMemory->response = response;
 }
 
 //-------------Parent process part----------------------
 
 #define WriteError(errorStack, function) (errorStack)->errorCode = (StackErrorCode) (ResponseToError (function) | (errorStack)->errorCode)
 
-StackErrorCode SecurityProcessStop (int securityProcessPID) {
+StackErrorCode SecurityProcessStop () {
     PushLog (2);
 
-    CallBackupOperation (-1, ABORT_PROCESS, NULL, 0);
+    CallBackupOperation (-1, ABORT_PROCESS, 0);
 
-    fprintf (stderr, "Waiting for security process to stop\n");
+    fprintf (stderr, "Waiting for security process %d to stop\n", SecurityProcessPid);
 
-    wait (NULL);
+    wait (&SecurityProcessPid);
 
-    fprintf (stderr, "Wait passed\n");
+    //fprintf (stderr, "Wait passed\n");
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode StackInitSecure (elem_t *stack, const StackCallData callData, ssize_t initialCapacity) {
+
+StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
-    StackInit ((Stack <elem_t> *) StackBackups + StackCount, callData, initialCapacity);
-    StackCommandResponse response = CallBackupOperation (descriptor, STACK_INIT_COMMAND, NULL, 0);
+    StackInit ((Stack *) StackBackups + StackCount, callData, initialCapacity);
+    StackCommandResponse response = CallBackupOperation (descriptor, STACK_INIT_COMMAND, 0);
 
     if (response == OPERATION_SUCCESS){
-        while (read (ResponsePipe [0], &descriptor, sizeof (descriptor)) == 0);
+        descriptor = requestMemory->stackDescriptor;
     }else{
-        WriteError ((Stack <elem_t> *)StackBackups + StackCount, response);
+        WriteError ((Stack *)StackBackups + StackCount, response);
     }
 
-    WriteError ((Stack <elem_t> *)StackBackups + StackCount, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, NULL, 0));
+    WriteError ((Stack *)StackBackups + StackCount, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
 
-    EncryptStackAddress((Stack <elem_t> *)StackBackups + StackCount, stack, descriptor);
+    EncryptStackAddress((Stack *)StackBackups + StackCount, stack, descriptor);
 
-    RETURN ((Stack <elem_t> *)StackBackups + StackCount)->errorCode;
+    RETURN ((Stack *)StackBackups + StackCount)->errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackDestructSecure (Stack <elem_t> *stack){
+
+StackErrorCode StackDestructSecure (Stack *stack){
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
-    Stack <elem_t> *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
     StackErrorCode errorCode = StackDestruct (realStack);
-    errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, NULL, 0)) | errorCode);
+    errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, 0)) | errorCode);
 
     RETURN errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPopSecure (Stack <elem_t> *stack, elem_t *returnValue, const StackCallData callData) {
+
+StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
-    Stack <elem_t> *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, NULL, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
 
     StackPop (realStack, returnValue, callData);
-    WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND, NULL, 0));
+    WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND,   0));
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, NULL, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
 
     RETURN realStack->errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPushSecure (Stack <elem_t> *stack, elem_t value, const StackCallData callData) {
+
+StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData callData) {
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
-    Stack <elem_t> *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, NULL, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
 
     StackPush (realStack, value, callData);
-    WriteError (realStack, CallBackupOperation (descriptor, STACK_PUSH_COMMAND, &value, sizeof (elem_t)));
+    WriteError (realStack, CallBackupOperation (descriptor, STACK_PUSH_COMMAND,  0));
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, NULL, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
 
     RETURN realStack->errorCode;
 }
 
-StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, void *arguments, size_t argumentsSize){
+StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument){
     PushLog (3);
 
-    write (CommandPipe [1], &operation,  sizeof (StackCommand));
+    requestMemory->stackDescriptor = descriptor;
+    requestMemory->argument = argument;
+    requestMemory->command = operation;
+    requestMemory->response = OPERATION_PROCESSING;
 
-    write (CommandPipe [1], &descriptor, sizeof (int));
+    while (requestMemory->response == OPERATION_PROCESSING && operation != ABORT_PROCESS);
 
-    if (arguments || argumentsSize == 0){
-        write (CommandPipe [1], arguments, argumentsSize);
-    }
-
-    StackCommandResponse response = OPERATION_FAILED;
-
-    while (read (ResponsePipe [0], &response, sizeof (StackCommand)) == 0);
-
-    RETURN response;
+    RETURN requestMemory->response;
 }
 
 StackErrorCode ResponseToError (StackCommandResponse response){
     return (response == OPERATION_SUCCESS ? NO_ERRORS : EXTERNAL_VERIFY_FAILED);
 }
 
-template <typename elem_t>
-Stack <elem_t> *DecryptStackAddress (Stack <elem_t> *stack, int *descriptor) {
+
+Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     PushLog (4);
 
     custom_assert(stack,      pointer_is_null, NULL);
     custom_assert(descriptor, pointer_is_null, NULL);
 
     char *stackChar = (char *) stack;
-    Stack <elem_t> *returnPointer = 0;
+    Stack *returnPointer = 0;
     char * returnPointerPointer = (char *) (&returnPointer);
     size_t byteNumber = 0;
 
@@ -500,8 +417,8 @@ Stack <elem_t> *DecryptStackAddress (Stack <elem_t> *stack, int *descriptor) {
     RETURN returnPointer;
 }
 
-template <typename elem_t>
-void EncryptStackAddress (Stack <elem_t> *stack, Stack <elem_t> *outPointer, int descriptor) {
+
+void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
     PushLog (4);
 
     custom_assert (stack,               pointer_is_null,     (void) 0);

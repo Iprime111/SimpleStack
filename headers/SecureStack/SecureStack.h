@@ -13,18 +13,18 @@ const size_t MAX_STACKS_COUNT = 1024;
 #define StackPopSecure_(stack, returnValue) StackPopSecure (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 #define StackPushSecure_(stack, value) StackPushSecure (stack, value, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
-template <typename elem_t>
-StackErrorCode SecurityProcessInit ();
-StackErrorCode SecurityProcessStop (int securityProcessPID);
 
-template <typename elem_t>
-StackErrorCode StackInitSecure (Stack <elem_t> *stack, const StackCallData callData, ssize_t initialCapacity=InitialCapacity);
-template <typename elem_t>
-StackErrorCode StackDestructSecure (Stack <elem_t> *stack);
-template <typename elem_t>
-StackErrorCode StackPopSecure (Stack <elem_t> *stack, elem_t *returnValue, const StackCallData callData);
-template <typename elem_t>
-StackErrorCode StackPushSecure (Stack <elem_t> *stack, elem_t value, const StackCallData callData);
+StackErrorCode SecurityProcessInit ();
+StackErrorCode SecurityProcessStop ();
+
+
+StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity=InitialCapacity);
+
+StackErrorCode StackDestructSecure (Stack *stack);
+
+StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData);
+
+StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData callData);
 
 enum StackCommand {
     UNKNOWN_COMMAND          = 0,
@@ -37,8 +37,18 @@ enum StackCommand {
 };
 
 enum StackCommandResponse {
-    OPERATION_SUCCESS   = 0,
-    OPERATION_FAILED    = 1,
+    OPERATION_PROCESSING = 0,
+    OPERATION_SUCCESS    = 1,
+    OPERATION_FAILED     = -1,
 };
 
+struct StackOperationRequest{
+    StackCommand command;
+
+    int stackDescriptor;
+
+    elem_t argument;
+
+    StackCommandResponse response;
+};
 #endif

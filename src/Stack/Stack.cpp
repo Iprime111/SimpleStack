@@ -7,27 +7,27 @@
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
-template <typename elem_t>
-static StackErrorCode StackRealloc (Stack <elem_t> *stack, const StackCallData callData);
 
-template <typename elem_t>
-static StackErrorCode StackVerifier (Stack <elem_t> *stack);
-template <typename elem_t>
-static void StackDump (const Stack <elem_t> *stack, const char *function, const char *file, int line, const StackCallData callData);
+static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
+
+
+static StackErrorCode StackVerifier (Stack *stack);
+
+static void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
 static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
-template <typename elem_t>
-static void DumpStackData (const Stack <elem_t> *stack);
-template <typename elem_t>
-static size_t getRealCapacity (const Stack <elem_t> *stack);
-template <typename elem_t>
-static size_t getRealAllocSize (const Stack <elem_t> *stack);
-template <typename elem_t>
-static void UpdateHashes (Stack <elem_t> *stack, size_t dataSize);
+
+static void DumpStackData (const Stack *stack);
+
+static size_t getRealCapacity (const Stack *stack);
+
+static size_t getRealAllocSize (const Stack *stack);
+
+static void UpdateHashes (Stack *stack, size_t dataSize);
 
 #ifdef _USE_HASH
 
-    template <typename elem_t>
-    void UpdateHashes (Stack <elem_t> *stack, size_t dataSize) {
+
+    void UpdateHashes (Stack *stack, size_t dataSize) {
         StackErrorCode hashErrorCode = NO_ERRORS;
         hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeStackHash (stack, &((stack)->stackHash)));
         hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeDataHash  (stack, dataSize, &((stack)->dataHash)));
@@ -35,13 +35,13 @@ static void UpdateHashes (Stack <elem_t> *stack, size_t dataSize);
     }
 
 #else
-    template <typename elem_t>
-    void UpdateHashes (Stack <elem_t> *stack, size_t dataSize) {}
+
+    void UpdateHashes (Stack *stack, size_t dataSize) {}
 
 #endif
 
-template <typename elem_t>
-StackErrorCode StackInit (Stack <elem_t> *stack, const StackCallData callData, ssize_t initialCapacity) {
+
+StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
     custom_assert (initialCapacity > 0, invalid_value, INVALID_INPUT);
@@ -80,8 +80,8 @@ StackErrorCode StackInit (Stack <elem_t> *stack, const StackCallData callData, s
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode StackDestruct (Stack <elem_t> *stack) {
+
+StackErrorCode StackDestruct (Stack *stack) {
     PushLog (2);
 
     if (!stack){
@@ -89,12 +89,13 @@ StackErrorCode StackDestruct (Stack <elem_t> *stack) {
     }
 
     if (stack->data){
-        memset(stack->data, 0, getRealAllocSize (stack));
 
         #ifdef _USE_CANARY
-            free (leftCanaryPointer);
+            memset(leftCanaryPointer, 0, getRealAllocSize (stack));
+            free  (leftCanaryPointer);
         #else
-            free (stack->data);
+            memset(stack->data, 0, getRealAllocSize (stack));
+            free  (stack->data);
         #endif
     }
 
@@ -106,8 +107,8 @@ StackErrorCode StackDestruct (Stack <elem_t> *stack) {
     RETURN NO_ERRORS;
 }
 
-template <typename elem_t>
-StackErrorCode StackRealloc (Stack <elem_t> *stack, const StackCallData callData){
+
+StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     PushLog (3);
     VerifyStack (stack, callData);
 
@@ -154,8 +155,8 @@ StackErrorCode StackRealloc (Stack <elem_t> *stack, const StackCallData callData
     RETURN stack->errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPop (Stack <elem_t> *stack, elem_t *returnValue, const StackCallData callData) {
+
+StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
     VerifyStack (stack, callData);
@@ -181,8 +182,8 @@ StackErrorCode StackPop (Stack <elem_t> *stack, elem_t *returnValue, const Stack
     RETURN stack->errorCode;
 }
 
-template <typename elem_t>
-StackErrorCode StackPush (Stack <elem_t> *stack, elem_t value, const StackCallData callData) {
+
+StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData) {
     PushLog (2);
     VerifyStack (stack, callData);
 
@@ -197,8 +198,8 @@ StackErrorCode StackPush (Stack <elem_t> *stack, elem_t value, const StackCallDa
 }
 
 // TODO pointer verify
-template <typename elem_t>
-StackErrorCode StackVerifier (Stack <elem_t> *stack) {
+
+StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
 
     if (!stack){
@@ -275,6 +276,7 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
         ERROR_MSG_ (errorCode, DATA_CANARY_CORRUPTED,  "Data canary has been corrupted");
         ERROR_MSG_ (errorCode, WRONG_STACK_HASH,       "Stack has been corrupted");
         ERROR_MSG_ (errorCode, WRONG_DATA_HASH,        "Data has been corrupted");
+        ERROR_MSG_ (errorCode, EXTERNAL_VERIFY_FAILED, "External verify has been failed");
 
         #undef  ERROR_MSG_
     }
@@ -282,8 +284,8 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
     fputs ("\n", stderr);
 }
 
-template <typename elem_t>
-void DumpStackData (const Stack <elem_t> *stack){
+
+void DumpStackData (const Stack *stack){
     if (!stack){
         fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Unable to read stack value\n");
 
@@ -355,8 +357,8 @@ void DumpStackData (const Stack <elem_t> *stack){
     fprintf_color (CONSOLE_RED,   CONSOLE_BOLD, stderr, "}\n");
 }
 
-template <typename elem_t>
-void StackDump (const Stack <elem_t> *stack, const char *function, const char *file, int line, const StackCallData callData) {
+
+void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData) {
     custom_assert_without_logger (function != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
@@ -374,8 +376,8 @@ void StackDump (const Stack <elem_t> *stack, const char *function, const char *f
 
 }
 
-template <typename elem_t>
-size_t getRealAllocSize (const Stack <elem_t> *stack){
+
+size_t getRealAllocSize (const Stack *stack){
     PushLog (3);
 
     if (stack == NULL || stack->data == NULL){
@@ -389,8 +391,8 @@ size_t getRealAllocSize (const Stack <elem_t> *stack){
     #endif
 }
 
-template <typename elem_t>
-size_t getRealCapacity (const Stack <elem_t> *stack){
+
+size_t getRealCapacity (const Stack *stack){
     PushLog (3);
 
     if (stack == NULL || stack->data == NULL){

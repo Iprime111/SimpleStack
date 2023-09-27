@@ -9,9 +9,9 @@
 int main() {
     PushLog (1);
 
-    SecurityProcessInit <double> ();
+    SecurityProcessInit ();
 
-    Stack <double> test_stack = {};
+    Stack test_stack = {};
 
     StackInitDefaultSecure_ (&test_stack);
 
@@ -34,7 +34,7 @@ int main() {
 
     printf ("Stopping security process...\n");
 
-    SecurityProcessStop (0);
+    SecurityProcessStop ();
 
     RETURN 0;
 }
