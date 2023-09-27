@@ -2,16 +2,16 @@
 #include <sys/wait.h>
 
 #include "CustomAssert.h"
-#include "Stack.h"
-#include "SecureStack.h"
+#include "Stack/Stack.h"
+#include "SecureStack/SecureStack.h"
 
 //TODO use alingment
 int main() {
     PushLog (1);
 
-    SecurityProcessInit ();
+    SecurityProcessInit <double> ();
 
-    Stack test_stack = {};
+    Stack <double> test_stack = {};
 
     StackInitDefaultSecure_ (&test_stack);
 
@@ -34,7 +34,7 @@ int main() {
 
     printf ("Stopping security process...\n");
 
-    SecurityProcessStop ();
+    SecurityProcessStop (0);
 
     RETURN 0;
 }
