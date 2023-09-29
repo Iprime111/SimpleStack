@@ -1,27 +1,36 @@
 #include <stdio.h>
+#include <sys/wait.h>
 
 #include "CustomAssert.h"
-#include "Stack.h"
+#include "Stack/Stack.h"
+#include "SecureStack/SecureStack.h"
 
-int main (){
+int main() {
     PushLog (1);
+
+    SecurityProcessInit ();
 
     Stack test_stack = {};
 
-    StackInitDefault_ (&test_stack);
+    StackInitDefaultSecure_ (&test_stack);
 
-    double test_variable = 1;
+    elem_t test_variable = 5;
 
     for (int i = 0; i < 15; i++){
-        StackPush_ (&test_stack, test_variable);
+        StackPushSecure_ (&test_stack, test_variable);
     }
 
-    test_stack.stackHash = 0;
+    fprintf (stderr, "Popping value from stack...\n");
 
-    StackPop_ (&test_stack, &test_variable);
+    StackPopSecure_ (&test_stack, &test_variable);
 
+    fprintf (stderr, "Destroying stack...\n");
 
-    StackDestruct_ (&test_stack);
+    StackDestructSecure_ (&test_stack);
+
+    fprintf (stderr, "Stopping security process...\n");
+
+    SecurityProcessStop ();
 
     RETURN 0;
 }
