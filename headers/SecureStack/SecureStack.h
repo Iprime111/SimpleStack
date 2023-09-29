@@ -8,7 +8,6 @@ const size_t PIPE_BUFFER_SIZE = 1024;
 const size_t MAX_STACKS_COUNT = 1024;
 
 #define StackInitDefaultSecure_(stack) StackInitSecure (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#define StackInitSizeSecure_(stack, initialCapacity) StackInitSecure (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
 #define StackDestructSecure_(stack) StackDestructSecure (stack)
 
 #define StackPopSecure_(stack, returnValue) StackPopSecure (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
