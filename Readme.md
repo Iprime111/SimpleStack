@@ -54,11 +54,9 @@ Pops value from the given `Stack` structure and writes it into `returnValue` var
 There are a couple of compilation defines that have an influence on program's behaviour:
 ### `_NDEBUG`
 Turns off debug mode and switches off assert functions and debug output.
-<br /><br />
 
 ### `_SHOW_STACK_TRACE`
 Turns on function logging and backtrace print when assert or stack verify are triggered.
-<br /><br />
 
 ### `_USE_CANARY`
 Turns on canary stack structure and stack data protection.
