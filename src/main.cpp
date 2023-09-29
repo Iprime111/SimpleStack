@@ -5,7 +5,6 @@
 #include "Stack/Stack.h"
 #include "SecureStack/SecureStack.h"
 
-//TODO use alingment
 int main() {
     PushLog (1);
 
@@ -15,9 +14,8 @@ int main() {
 
     StackInitDefaultSecure_ (&test_stack);
 
-    double test_variable = 1;
+    elem_t test_variable = 5;
 
-    // TODO unit tets on Gtests
     for (int i = 0; i < 15; i++){
         StackPushSecure_ (&test_stack, test_variable);
     }

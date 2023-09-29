@@ -13,12 +13,44 @@
 #include "ColorConsole.h"
 #include "CustomAssert.h"
 #include "SecureStack/SecureStack.h"
+#include "Stack/ProcParser.h"
 #include "Stack/StackPrintf.h"
 #include "Logger.h"
 
 typedef StackErrorCode CallbackFunction_t ();
 
-static const unsigned int CycleSleepTime = 1;
+#define FunctionName "(\033[1;36m%s\033[0;37m)"
+
+#define FindStack(stack) \
+    do {                                                                            \
+        stack = GetStackFromDescriptor (requestMemory->stackDescriptor);            \
+        if (!stack) {                                                               \
+            PrintOperationResult (stderr, OPERATION_PROCESS_ERROR, operationName);  \
+            WriteResult (STACK_POINTER_NULL);                                       \
+            RETURN STACK_POINTER_NULL;                                              \
+        }                                                                           \
+    }while (0)
+
+#define OperationFail(operation, error)                                     \
+    do {                                                                    \
+        PrintOperationResult (stderr, OPERATION_FAILED, operation);         \
+        WriteCommandResponse (OPERATION_FAILED);                            \
+        RETURN error;                                                       \
+    }while (0)
+
+#define OperationSuccess(operation)                                         \
+    do {                                                                    \
+        PrintOperationResult (stderr, OPERATION_SUCCESS, operation);        \
+        WriteCommandResponse (OPERATION_SUCCESS);                           \
+        RETURN NO_ERRORS;                                                   \
+    }while (0)
+
+#define OperationProcessError(operation)                                    \
+    do {                                                                    \
+        PrintOperationResult (stderr, OPERATION_PROCESS_ERROR, operation);  \
+        WriteCommandResponse (OPERATION_PROCESS_ERROR);                     \
+        RETURN SECURITY_PROCESS_ERROR;                                      \
+    }while (0)
 
 static int SecurityProcessPid = -1;
 static StackOperationRequest *requestMemory = NULL;
@@ -27,7 +59,7 @@ static size_t StackCount = 0;
 static void *StackBackups = NULL;
 
 //=====================================================================================================================================================================================
-//====================================================================CHILD PROCESS PROTOTYPES=========================================================================================
+//=================================================================== CHILD PROCESS PROTOTYPES ========================================================================================
 //=====================================================================================================================================================================================
 
 StackOperationRequest *CreateSharedMemory (size_t size);
@@ -46,11 +78,11 @@ static Stack *GetStackFromDescriptor (int stackDescriptor);
 static void WriteCommandResponse (StackCommandResponse response);
 static void WriteResult (StackErrorCode errorCode);
 
-static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType, char *message, ...);
-static void PrintOperationResult (FILE *stream, StackCommandResponse response,char *operationName);
+static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType, const char *message, ...);
+static void PrintOperationResult (FILE *stream, StackCommandResponse response, const char *operationName);
 
 //=====================================================================================================================================================================================
-//====================================================================PARENT PROCESS PROTOTYPES========================================================================================
+//=================================================================== PARENT PROCESS PROTOTYPES =======================================================================================
 //=====================================================================================================================================================================================
 
 
@@ -62,21 +94,25 @@ static Stack *DecryptStackAddress (Stack *stack, int *descriptor);
 
 
 //=====================================================================================================================================================================================
-//====================================================================CHILD PROCESS PART===============================================================================================
+//=================================================================== CHILD PROCESS PART ==============================================================================================
 //=====================================================================================================================================================================================
 
 
 StackOperationRequest *CreateSharedMemory (size_t size){
+    PushLog (3);
+
     StackOperationRequest *memory = (StackOperationRequest *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
     memory->stackDescriptor = -1;
     memory->response = OPERATION_FAILED;
     memory->command = UNKNOWN_COMMAND;
 
-    return memory;
+    RETURN memory;
 }
 
 StackErrorCode SecurityProcessInit (){
+    PushLog (1);
+
     requestMemory = CreateSharedMemory (sizeof (StackOperationRequest));
 
     SecurityProcessPid = fork ();
@@ -84,29 +120,31 @@ StackErrorCode SecurityProcessInit (){
     if (SecurityProcessPid < 0){
         PrintSecurityProcessInfo (stderr, ERROR_MESSAGE, "Error occuried while forking\n");
 
-        return SECURITY_PROCESS_ERROR;
+        RETURN SECURITY_PROCESS_ERROR;
     }else if (SecurityProcessPid == 0){
 
         StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack));
 
         if (!StackBackups){
-            return SECURITY_PROCESS_ERROR;
+            RETURN SECURITY_PROCESS_ERROR;
         }
 
         SecurityProcessBackupLoop ();
 
-        return NO_ERRORS;
+        RETURN NO_ERRORS;
     }else{
 
         StackBackups = calloc (MAX_STACKS_COUNT, sizeof (Stack));
 
-        return NO_ERRORS;
+        RETURN NO_ERRORS;
     }
 
 }
 
 
 StackErrorCode SecurityProcessDestruct () {
+    PushLog (1);
+
     PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Destroying security process...\n");
 
     for (size_t stackIndex = 0; stackIndex < StackCount; stackIndex++){
@@ -124,11 +162,12 @@ StackErrorCode SecurityProcessDestruct () {
     PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Aborting security process...\n");
 
     exit (0);
-    return NO_ERRORS;
+    RETURN NO_ERRORS;
 }
 
 
 StackErrorCode SecurityProcessBackupLoop (){
+    PushLog (1);
 
     #define COMMAND_(targetCommand, callback)                                                                           \
         if (targetCommand == requestMemory->command){                                                                   \
@@ -151,7 +190,6 @@ StackErrorCode SecurityProcessBackupLoop (){
 
         if (requestMemory->command == UNKNOWN_COMMAND){
             PrintSecurityProcessInfo (stderr, WARNING_MESSAGE, "Something has gone wrong\n");
-
             WriteCommandResponse (OPERATION_PROCESS_ERROR);
         }
 
@@ -161,12 +199,11 @@ StackErrorCode SecurityProcessBackupLoop (){
             continue;
 
         if ((errorCode = callbackFunction ()) != NO_ERRORS){
-            return errorCode;
-        }else {
-            callbackFunction = NULL;
+            PrintSecurityProcessInfo (stderr, WARNING_MESSAGE, "Stack error has been occuried!");
+
         }
 
-        usleep (CycleSleepTime);
+        callbackFunction = NULL;
 
     }while (requestMemory->command != ABORT_PROCESS);
 
@@ -174,17 +211,16 @@ StackErrorCode SecurityProcessBackupLoop (){
 
     #undef COMMAND_
 
-    return NO_ERRORS;
+    RETURN NO_ERRORS;
 }
 
 StackErrorCode StackInitSecureProcess () {
-    char operationName [] = "init stack";
+    PushLog (2);
+
+    const char operationName [] = "init stack";
 
     if (StackCount >= MAX_STACKS_COUNT){
-        WriteCommandResponse (OPERATION_PROCESS_ERROR);
-        PrintOperationResult (stderr, OPERATION_PROCESS_ERROR, operationName);
-
-        return SECURITY_PROCESS_ERROR;
+        OperationProcessError (operationName);
     }
 
     StackErrorCode errorCode = StackInit ((Stack *) StackBackups + StackCount, {"", "", 0, "", false});
@@ -193,100 +229,124 @@ StackErrorCode StackInitSecureProcess () {
         requestMemory->stackDescriptor = (int) StackCount;
         StackCount++;
 
-        WriteCommandResponse (OPERATION_SUCCESS);
-        PrintOperationResult (stderr, OPERATION_SUCCESS, operationName);
-    }else {
-        WriteCommandResponse (OPERATION_FAILED);
-        PrintOperationResult (stderr, OPERATION_FAILED, operationName);
+        OperationSuccess (operationName);
     }
 
-    return errorCode;
+    OperationFail (operationName, errorCode);
 }
 
 
 StackErrorCode StackDestructSecureProcess () {
-    char operationName [] = "stack destruct";
+    PushLog (2);
 
-    StackErrorCode errorCode = StackDestruct (GetStackFromDescriptor (requestMemory->stackDescriptor));
+    const char operationName [] = "stack destruct";
 
-    WriteResult (errorCode);
-    PrintOperationResult (stderr, OPERATION_SUCCESS, operationName);
+    Stack *stack = NULL;
+    FindStack (stack);
 
-    return errorCode;
+    StackErrorCode errorCode = StackDestruct (stack);
+
+    if (errorCode == NO_ERRORS){
+        OperationSuccess (operationName);
+    }
+
+    OperationFail (operationName, errorCode);
 }
 
 
 StackErrorCode StackPopSecureProcess () {
-    char operationName [] = "stack pop";
+    PushLog (2);
 
-    StackErrorCode errorCode =  StackPop (GetStackFromDescriptor (requestMemory->stackDescriptor), NULL, {"","", 0, "", false});
+    const char operationName [] = "stack pop";
 
-    WriteResult (errorCode);
-    PrintOperationResult (stderr, OPERATION_SUCCESS, operationName);
+    Stack *stack = NULL;
+    FindStack (stack);
 
-    return errorCode;
+    StackErrorCode errorCode =  StackPop (stack, NULL, {"","", 0, "", false});
+
+    if (errorCode == NO_ERRORS){
+        OperationSuccess (operationName);
+    }
+
+    OperationFail (operationName, errorCode);
 }
 
 
 StackErrorCode StackPushSecureProcess () {
-    char operationName [] = "stack push";
+    PushLog (2);
 
-    StackErrorCode errorCode = StackPush (GetStackFromDescriptor (requestMemory->stackDescriptor), requestMemory->argument, {"","", 0, "", false});
+    const char operationName [] = "stack push";
 
-    WriteResult (errorCode);
+    Stack *stack = NULL;
+    FindStack (stack);
 
-    PrintSecurityProcessInfo (stderr,SUCCESS_MESSAGE , "Command executed (\033[1;36m%s\033[0;37m). Pushed ", operationName);
-    print_data (CONSOLE_WHITE, CONSOLE_NORMAL, stderr, requestMemory->argument);
-    fprintf (stderr, "\n");
+    StackErrorCode errorCode = StackPush (stack, requestMemory->argument, {"","", 0, "", false});
 
-    return errorCode;
+    if (errorCode == NO_ERRORS) {
+        PrintSecurityProcessInfo (stderr, SUCCESS_MESSAGE , "Command executed " FunctionName ". Pushed ", operationName);
+        PrintData (CONSOLE_WHITE, CONSOLE_NORMAL, stderr, requestMemory->argument);
+        fprintf (stderr, "\n");
+
+        WriteResult (NO_ERRORS);
+        RETURN NO_ERRORS;
+    }
+
+    OperationFail (operationName, errorCode);
 }
 
 StackErrorCode VerifyStackSecureProcess (){
-    char operationName [] = "stack verification";
+    PushLog (2);
 
-    Stack *stack = GetStackFromDescriptor (requestMemory->stackDescriptor);
+    const char operationName [] = "stack verification";
 
-    if (stack == NULL){
-        WriteCommandResponse (OPERATION_PROCESS_ERROR);
-        PrintOperationResult (stderr, OPERATION_PROCESS_ERROR, operationName);
-
-        return STACK_POINTER_NULL;
-    }
+    Stack *stack = NULL;
+    FindStack (stack);
 
     if (requestMemory->dataHash == stack->dataHash){
-        WriteCommandResponse (OPERATION_SUCCESS);
-        PrintOperationResult (stderr, OPERATION_SUCCESS, operationName);
-    }else{
-        WriteCommandResponse (OPERATION_FAILED);
-        PrintOperationResult (stderr, OPERATION_FAILED, operationName);
+        OperationSuccess (operationName);
     }
 
-    return NO_ERRORS;
+    OperationFail (operationName, WRONG_DATA_HASH);
 }
 
 Stack *GetStackFromDescriptor (int stackDescriptor){
-    return (Stack *) StackBackups + stackDescriptor;
+    PushLog (3);
+
+    custom_assert (stackDescriptor >= 0,                  invalid_value, NULL);
+    custom_assert ((size_t) stackDescriptor < StackCount, invalid_value, NULL);
+
+    RETURN (Stack *) StackBackups + stackDescriptor;
 }
 
 void WriteResult (StackErrorCode errorCode) {
+    PushLog (3);
+
 
     if (errorCode == NO_ERRORS){
         WriteCommandResponse (OPERATION_SUCCESS);
-    }else {
-        WriteCommandResponse (OPERATION_FAILED);
+
+        RETURN;
     }
+
+    WriteCommandResponse (OPERATION_FAILED);
+    RETURN;
 }
 
 void WriteCommandResponse (StackCommandResponse response) {
+    PushLog (3);
+    custom_assert (IsAddressValid (requestMemory), pointer_is_null, (void)0);
+
     requestMemory->response = response;
+
+    RETURN;
 }
 
 #ifndef _NDEBUG
 
-static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType, char *message, ...) {
-    custom_assert_without_logger (stream,  pointer_is_null, (void)0);
-    custom_assert_without_logger (message, pointer_is_null, (void)0);
+static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType, const char *message, ...) {
+    PushLog (3);
+    custom_assert (stream,  pointer_is_null, (void)0);
+    custom_assert (message, pointer_is_null, (void)0);
 
     va_list args = {};
     va_start (args, message);
@@ -319,42 +379,41 @@ static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType, cha
     vfprintf_color (CONSOLE_WHITE, CONSOLE_NORMAL, stream, message, args);
 
     va_end (args);
+
+    RETURN;
 }
 
-static void PrintOperationResult (FILE *stream, StackCommandResponse response, char *operationName) {
-    custom_assert_without_logger (stream,        pointer_is_null, (void)0);
-    custom_assert_without_logger (operationName, pointer_is_null, (void)0);
+static void PrintOperationResult (FILE *stream, StackCommandResponse response, const char *operationName) {
+    PushLog (3);
+    custom_assert (stream,        pointer_is_null, (void)0);
+    custom_assert (operationName, pointer_is_null, (void)0);
 
     char *formatString = NULL;
     MessageType type = INFO_MESSAGE;
 
+    #define MESSAGE_(operation, message, messageType)       \
+            case operation:                                 \
+                formatString = message FunctionName "\n";   \
+                type = messageType;                         \
+                break;
+
     switch (response){
-        case OPERATION_FAILED:
-            formatString = "Stack corruption has been detected (\033[1;36m%s\033[0;37m)\n";
-            type = WARNING_MESSAGE;
+
+        MESSAGE_ (OPERATION_FAILED,        "Stack corruption has been detected ", WARNING_MESSAGE );
+        MESSAGE_ (OPERATION_PROCESSING,    "Operation is still processing now ",  INFO_MESSAGE    );
+        MESSAGE_ (OPERATION_SUCCESS,       "Command executed ",                   SUCCESS_MESSAGE );
+        MESSAGE_ (OPERATION_PROCESS_ERROR, "Error occuried ",                     ERROR_MESSAGE   );
+
+        default:
+            RETURN;
             break;
+    };
 
-            case OPERATION_PROCESSING:
-                formatString = "Operation is still processing now (\033[1;36m%s\033[0;37m)\n";
-                type = INFO_MESSAGE;
-                break;
-
-            case OPERATION_SUCCESS:
-                formatString = "Command executed (\033[1;36m%s\033[0;37m)\n";
-                type = SUCCESS_MESSAGE;
-                break;
-
-            case OPERATION_PROCESS_ERROR:
-                formatString = "Error occuried (\033[1;36m%s\033[0;37m)\n";
-                type = ERROR_MESSAGE;
-                break;
-
-            default:
-                return;
-                break;
-        };
+    #undef MESSAGE_
 
     PrintSecurityProcessInfo (stream, type, formatString, operationName);
+
+    RETURN;
 }
 #else
 
@@ -363,8 +422,14 @@ static void PrintOperationResult (FILE *stream, StackCommandResponse response, c
 
 #endif
 
+#undef FunctionName
+#undef FindStack
+#undef OperationFail
+#undef OperationSuccess
+#undef OperationProcessError
+
 //=====================================================================================================================================================================================
-//====================================================================PARENT PROCESS PART==============================================================================================
+//=================================================================== PARENT PROCESS PART =============================================================================================
 //=====================================================================================================================================================================================
 
 
@@ -424,7 +489,7 @@ StackErrorCode StackDestructSecure (Stack *stack){
 }
 
 
-StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData) {
+StackErrorCode StackPopSecure (Stack *stack, elem_t *RETURNValue, const StackCallData callData) {
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
@@ -435,7 +500,7 @@ StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCal
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
-    StackPop (realStack, returnValue, callData);
+    StackPop (realStack, RETURNValue, callData);
     WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND,    0, realStack));
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0, realStack));
@@ -490,6 +555,9 @@ StackErrorCode ResponseToError (StackCommandResponse response){
 //===================================================================================================================================================================
 // My first intension was to to obfuscate this code below |, but I'm too lazy :) Just don't copy (and watch) it pleaaase=============================================
 //=======================================================\ /=========================================================================================================
+//==============================================================!!!WARNING!!!========================================================================================
+//==================================== CODE BELOW WORKS ONLY WITH 8 BITS IN BYTE, sizeof (char) == 1 AND sizeof (Stack *) == 32 =====================================
+//===================================================================================================================================================================
 
 Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     // Why are you doing that, dude?
@@ -500,29 +568,31 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     custom_assert(descriptor, pointer_is_null, NULL);
 
     char *stackChar = (char *) stack;
-    Stack *returnPointer = 0;
-    char * returnPointerPointer = (char *) (&returnPointer);
+    Stack *RETURNPointer = 0;
+    char * RETURNPointerPointer = (char *) (&RETURNPointer);
     size_t byteNumber = 0;
 
     int checksum = 0;
 
     // Seriously, you have to stop
 
+    const size_t worksOnlyForThisBitsInChar = 8;
+
     for (size_t byteIndex = 0; byteIndex < 4; byteIndex++){
-        for (size_t bit = 0; bit < 8; bit++){
+        for (size_t bit = 0; bit < worksOnlyForThisBitsInChar; bit++){
             if (stackChar [byteIndex] & (1 << bit)){
 
                 if (byteIndex == 0){
                     RETURN NULL;
                 }
 
-                if (byteNumber >= 8){
+                if (byteNumber >= sizeof (Stack *)){
                     RETURN NULL;
                 }
 
                 checksum += stackChar [byteIndex * 8 + bit];
 
-                returnPointerPointer [byteNumber++] = stackChar [byteIndex * 8 + bit];
+                RETURNPointerPointer [byteNumber++] = stackChar [byteIndex * 8 + bit];
             }
         }
     }
@@ -531,11 +601,11 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
         RETURN NULL;
     }
 
-    *descriptor = *((int *) (void *) (stackChar + 24));
+    *descriptor = *((int *) (void *) (stackChar + 3 * worksOnlyForThisBitsInChar));
 
     // It would be unfair if u copy that :(
 
-    RETURN returnPointer;
+    RETURN RETURNPointer;
 }
 
 void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
@@ -554,13 +624,15 @@ void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
 
     memset (outPointerChar, 0, 8);
 
-    for (size_t pointerByte = 0; pointerByte < 8; pointerByte++){
+    const size_t worksOnlyForThisBitsInChar = 8;
+
+    for (size_t pointerByte = 0; pointerByte < sizeof (Stack *); pointerByte++){
         size_t pointerPosition = 0, addressByte = 0, addressBit = 0;
         do {
-            pointerPosition = (size_t) rand () % 2 + pointerByte * 2 + 8;
+            pointerPosition = (size_t) rand () % 2 + pointerByte * 2 + sizeof (int) + sizeof (Stack) / worksOnlyForThisBitsInChar;
 
-            addressByte = pointerPosition / 8;
-            addressBit  = pointerPosition % 8;
+            addressByte = pointerPosition / worksOnlyForThisBitsInChar;
+            addressBit  = pointerPosition % worksOnlyForThisBitsInChar;
         } while (outPointerChar [addressByte] & 1 << addressBit);
 
         outPointerChar [pointerPosition] = stackChar [pointerByte];
@@ -572,10 +644,9 @@ void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
 
     *((int *) (void *) (outPointerChar + 4)) = checksum;
 
-    *((int *) (void *) (outPointerChar + 24)) = descriptor;
+    *((int *) (void *) (outPointerChar + 3 * worksOnlyForThisBitsInChar)) = descriptor;
 
     RETURN;
 }
 
-
-
+#undef WriteError

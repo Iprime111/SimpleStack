@@ -94,7 +94,7 @@ StackErrorCode ComputeDataHash (Stack *stack, size_t dataLength, hash_t *hash) {
     }
 
     #ifdef _USE_CANARY
-        canary_t *dataPointer = leftCanaryPointer;
+        canary_t *dataPointer = leftCanaryPointer (stack);
     #else
         elem_t   *dataPointer = stack->data;
     #endif

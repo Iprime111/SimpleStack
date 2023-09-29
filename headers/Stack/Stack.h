@@ -8,14 +8,11 @@ typedef double elem_t;
 const ssize_t ReallocationScale = 2;
 const ssize_t InitialCapacity = 10;
 
-#define ElementPrintfSpecifier "%lf"
-
 #ifdef _USE_CANARY
     typedef unsigned long long canary_t;
 
-    // TODO pass stack as arg
-    #define leftCanaryPointer  ((canary_t *) stack->data - 1)
-    #define rightCanaryPointer ((canary_t *) (stack->data + stack->capacity))
+    #define leftCanaryPointer(stack)  ((canary_t *) (stack)->data - 1)
+    #define rightCanaryPointer(stack) ((canary_t *) ((stack)->data + (stack)->capacity))
 
     const canary_t CanaryNormal = 0xFBADBEEF;
 #endif

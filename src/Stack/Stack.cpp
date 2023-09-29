@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstring>
 #include <malloc.h>
 
@@ -15,15 +16,14 @@ static StackErrorCode StackVerifier (Stack *stack);
 
 static void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
 static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
-
 static void DumpStackData (const Stack *stack);
 
 static size_t getRealCapacity (const Stack *stack);
-
 static size_t getRealAllocSize (const Stack *stack);
 
 static void UpdateHashes (Stack *stack, size_t dataSize);
 
+static void CorrectAlignment (Stack *stack);
 
 #ifdef _USE_HASH
 
@@ -51,6 +51,8 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
     stack->capacity = initialCapacity;
     stack->size = 0;
     stack->errorCode = NO_ERRORS;
+
+    CorrectAlignment (stack);
     size_t callocSize =  (size_t) stack->capacity * sizeof (elem_t);
 
     #ifdef _USE_CANARY
@@ -65,8 +67,8 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
     #ifdef _USE_CANARY
         stack->data = (elem_t *) ((canary_t *) stack->data + 1);
 
-        *leftCanaryPointer  = CanaryNormal;
-        *rightCanaryPointer = CanaryNormal;
+        *leftCanaryPointer (stack)  = CanaryNormal;
+        *rightCanaryPointer (stack) = CanaryNormal;
     #endif
 
     #ifdef _USE_HASH
@@ -92,8 +94,8 @@ StackErrorCode StackDestruct (Stack *stack) {
     if (IsAddressValid (stack->data)){
 
         #ifdef _USE_CANARY
-            memset(leftCanaryPointer, 0, getRealAllocSize (stack));
-            free  (leftCanaryPointer);
+            memset(leftCanaryPointer (stack), 0, getRealAllocSize (stack));
+            free  (leftCanaryPointer (stack));
         #else
             memset(stack->data, 0, getRealAllocSize (stack));
             free  (stack->data);
@@ -116,12 +118,14 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     if (stack->size == stack->capacity){
         stack->capacity *= ReallocationScale;
 
-    }else if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){ // TODO think about integer division
+    }else if (stack->size < stack->capacity / (ReallocationScale * ReallocationScale)){
         stack->capacity /= ReallocationScale;
 
     }else{
         RETURN NO_ERRORS;
     }
+
+   CorrectAlignment (stack);
 
     size_t reallocSize  = (size_t) stack->capacity * sizeof (elem_t);
 
@@ -146,7 +150,7 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     stack->data = testDataPointer;
 
     #ifdef _USE_CANARY
-        *rightCanaryPointer = CanaryNormal;
+        *rightCanaryPointer (stack) = CanaryNormal;
     #endif
 
     UpdateHashes (stack, reallocSize);
@@ -197,8 +201,6 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
 
     RETURN stack->errorCode;
 }
-
-// TODO pointer verify
 
 StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
@@ -313,11 +315,11 @@ void DumpStackData (const Stack *stack){
     #endif
 
     #ifdef _USE_CANARY
-        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "leftDataCanary", leftCanaryPointer);
-        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *leftCanaryPointer);
+        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "leftDataCanary", leftCanaryPointer (stack));
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *leftCanaryPointer (stack));
 
-        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "rightDataCanary", rightCanaryPointer);
-        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *rightCanaryPointer);
+        fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "rightDataCanary", ((canary_t *) (stack->data + realStackCapacity)));
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *((canary_t *) (stack->data +realStackCapacity)));
     #endif
 
     #ifdef _USE_HASH
@@ -344,7 +346,7 @@ void DumpStackData (const Stack *stack){
 
         fprintf_color (dataColor,     CONSOLE_NORMAL, stderr, "\t\tdata [%lu] (%p) = ", index, stack->data + index);
 
-        print_data (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, stack->data [index]);
+        PrintData (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, stack->data [index]);
 
         fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, "\n");
 
@@ -371,7 +373,6 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
     fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "\nBACKTRACE:\n");
 
     Show_stack_trace ();
-
 }
 
 
@@ -402,4 +403,15 @@ size_t getRealCapacity (const Stack *stack){
     #else
         RETURN getRealAllocSize(stack) / sizeof (elem_t);
     #endif
+}
+
+void CorrectAlignment (Stack *stack){
+    PushLog (3);
+
+    custom_assert (IsAddressValid (stack), pointer_is_null, (void) 0);
+
+    while (((size_t) stack->capacity * sizeof (elem_t)) % sizeof (canary_t) != 0)
+        stack->capacity++;
+
+    RETURN;
 }
