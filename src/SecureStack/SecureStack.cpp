@@ -452,7 +452,7 @@ StackErrorCode SecurityProcessStop () {
 StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity) {
     PushLog (2);
 
-    custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
+    custom_assert (IsAddressValid (stack), pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
@@ -476,7 +476,7 @@ StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssiz
 StackErrorCode StackDestructSecure (Stack *stack){
     PushLog (2);
 
-    custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
+    custom_assert (IsAddressValid (stack), pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
 
@@ -484,6 +484,8 @@ StackErrorCode StackDestructSecure (Stack *stack){
 
     StackErrorCode errorCode = StackDestruct (realStack);
     errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, 0, realStack)) | errorCode);
+
+    memset (stack, 0, sizeof (Stack));
 
     RETURN errorCode;
 }
