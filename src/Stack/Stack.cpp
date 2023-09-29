@@ -4,13 +4,13 @@
 #include "Logger.h"
 #include "Stack/Stack.h"
 #include "Stack/StackHash.h"
+#include "Stack/StackPrintf.h"
+#include "Stack/ProcParser.h"
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
 
 static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
-
-
 static StackErrorCode StackVerifier (Stack *stack);
 
 static void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
@@ -23,6 +23,7 @@ static size_t getRealCapacity (const Stack *stack);
 static size_t getRealAllocSize (const Stack *stack);
 
 static void UpdateHashes (Stack *stack, size_t dataSize);
+
 
 #ifdef _USE_HASH
 
@@ -84,11 +85,11 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
 StackErrorCode StackDestruct (Stack *stack) {
     PushLog (2);
 
-    if (!stack){
+    if (!IsAddressValid (stack)){
         RETURN STACK_POINTER_NULL;
     }
 
-    if (stack->data){
+    if (IsAddressValid (stack->data)){
 
         #ifdef _USE_CANARY
             memset(leftCanaryPointer, 0, getRealAllocSize (stack));
@@ -202,7 +203,7 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
 StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
 
-    if (!stack){
+    if (!IsAddressValid (stack)){
         RETURN STACK_POINTER_NULL;
     }
 
@@ -211,7 +212,7 @@ StackErrorCode StackVerifier (Stack *stack) {
             (stack->errorCode) = (StackErrorCode) ((stack->errorCode) | patternErrorCode);  \
         }
 
-    VerifyExpression_ (stack->data,                        DATA_POINTER_NULL);
+    VerifyExpression_ (IsAddressValid(stack->data),        DATA_POINTER_NULL);
     VerifyExpression_ (stack->capacity >= 0,               INVALID_CAPACITY_VALUE);
     VerifyExpression_ (stack->size >= 0,                   ANTI_OVERFLOW);
     VerifyExpression_ (stack->size <= stack->capacity,     OVERFLOW);
@@ -286,7 +287,7 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
 
 
 void DumpStackData (const Stack *stack){
-    if (!stack){
+    if (!IsAddressValid (stack)){
         fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Unable to read stack value\n");
 
         return;
@@ -328,7 +329,7 @@ void DumpStackData (const Stack *stack){
 
     fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, "\tdata (%p){\n ", stack->data);
 
-    if (!stack->data){
+    if (!IsAddressValid (stack->data)){
         fprintf_color (CONSOLE_YELLOW, CONSOLE_BOLD, stderr, "\t\tUnable to read stack->data value\n}\n");
         fprintf_color (CONSOLE_RED,    CONSOLE_BOLD, stderr, "}\n");
 
@@ -343,12 +344,9 @@ void DumpStackData (const Stack *stack){
 
         fprintf_color (dataColor,     CONSOLE_NORMAL, stderr, "\t\tdata [%lu] (%p) = ", index, stack->data + index);
 
-        // TODO user print function
-        // if (stack->print_func) {
-        //     ...
-        // }
-        // else ....
-        fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, ElementPrintfSpecifier "\n", stack->data [index]);
+        print_data (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, stack->data [index]);
+
+        fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, "\n");
 
     }
 
@@ -380,7 +378,7 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
 size_t getRealAllocSize (const Stack *stack){
     PushLog (3);
 
-    if (stack == NULL || stack->data == NULL){
+    if (!IsAddressValid (stack) || !IsAddressValid (stack->data)){
         RETURN 0;
     }
 
@@ -395,7 +393,7 @@ size_t getRealAllocSize (const Stack *stack){
 size_t getRealCapacity (const Stack *stack){
     PushLog (3);
 
-    if (stack == NULL || stack->data == NULL){
+    if (!IsAddressValid (stack) || !IsAddressValid (stack->data)){
         RETURN 0;
     }
 
@@ -405,26 +403,3 @@ size_t getRealCapacity (const Stack *stack){
         RETURN getRealAllocSize(stack) / sizeof (elem_t);
     #endif
 }
-
-
-// TODO
-// template <typename T>
-// void print_data(T) {
-//     printf("%x", ....);
-// }
-//
-// template <>
-// void print_data(int data) {
-//     printf("%d\n", data);
-// }
-//
-// template <>
-// void print_data(double data) {
-//     printf("%lf\n", data);
-// }
-//
-// template <>
-// void print_data(mat_v_kanave data) {
-//     ....
-// }
-//

@@ -22,15 +22,15 @@ int main() {
         StackPushSecure_ (&test_stack, test_variable);
     }
 
-    printf ("Popping value from stack...\n");
+    fprintf (stderr, "Popping value from stack...\n");
 
     StackPopSecure_ (&test_stack, &test_variable);
 
-    printf ("Destroying stack...\n");
+    fprintf (stderr, "Destroying stack...\n");
 
     StackDestructSecure_ (&test_stack);
 
-    printf ("Stopping security process...\n");
+    fprintf (stderr, "Stopping security process...\n");
 
     SecurityProcessStop ();
 

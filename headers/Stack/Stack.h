@@ -112,6 +112,5 @@ StackErrorCode StackDestruct (Stack *stack);
 StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData);
 
 StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData);
-
 #endif
 

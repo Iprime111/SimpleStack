@@ -2,8 +2,7 @@
 #define SECURE_STACK_H_
 
 #include "Stack/Stack.h"
-#include <Stack/StackHash.h>
-#include <functional>
+#include "Stack/StackHash.h"
 
 const size_t PIPE_BUFFER_SIZE = 1024;
 const size_t MAX_STACKS_COUNT = 1024;
@@ -39,9 +38,17 @@ enum StackCommand {
 };
 
 enum StackCommandResponse {
-    OPERATION_PROCESSING = 0,
-    OPERATION_SUCCESS    = 1,
-    OPERATION_FAILED     = -1,
+    OPERATION_PROCESSING        = 0,
+    OPERATION_SUCCESS           = 1,
+    OPERATION_FAILED            = -1,
+    OPERATION_PROCESS_ERROR     = -2
+};
+
+enum MessageType {
+    INFO_MESSAGE    = 0,
+    ERROR_MESSAGE   = 1,
+    WARNING_MESSAGE = 2,
+    SUCCESS_MESSAGE = 3,
 };
 
 struct StackOperationRequest{
