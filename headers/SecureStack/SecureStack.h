@@ -2,6 +2,8 @@
 #define SECURE_STACK_H_
 
 #include "Stack/Stack.h"
+#include <Stack/StackHash.h>
+#include <functional>
 
 const size_t PIPE_BUFFER_SIZE = 1024;
 const size_t MAX_STACKS_COUNT = 1024;
@@ -48,6 +50,9 @@ struct StackOperationRequest{
     int stackDescriptor;
 
     elem_t argument;
+
+    hash_t stackHash;
+    hash_t dataHash;
 
     StackCommandResponse response;
 };

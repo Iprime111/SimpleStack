@@ -22,9 +22,7 @@ int main() {
         StackPushSecure_ (&test_stack, test_variable);
     }
 
-    //test_stack.stackHash = 0;
-
-     printf ("Popping value from stack...\n");
+    printf ("Popping value from stack...\n");
 
     StackPopSecure_ (&test_stack, &test_variable);
 

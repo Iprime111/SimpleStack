@@ -52,11 +52,10 @@ static void WriteResult (StackErrorCode errorCode);
 
 //------------------PARENT PROCESS PROTOTYPES--------------------
 
-static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument);
+static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack);
 StackErrorCode ResponseToError (StackCommandResponse response);
 
 static void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor);
-
 static Stack *DecryptStackAddress (Stack *stack, int *descriptor);
 
 //-------------Child process part----------------------
@@ -237,7 +236,15 @@ StackErrorCode StackPushSecureProcess () {
 }
 
 StackErrorCode VerifyStackSecureProcess (){
-    WriteCommandResponse (OPERATION_SUCCESS);
+    Stack *stack = GetStackFromDescriptor (requestMemory->stackDescriptor);
+
+    if (stack == NULL)
+        return STACK_POINTER_NULL;
+
+    if (requestMemory->dataHash == stack->dataHash && requestMemory->stackHash == stack->stackHash)
+        WriteCommandResponse (OPERATION_SUCCESS);
+
+    WriteCommandResponse (OPERATION_FAILED);
 
     return NO_ERRORS;
 }
@@ -266,7 +273,7 @@ void WriteCommandResponse (StackCommandResponse response) {
 StackErrorCode SecurityProcessStop () {
     PushLog (2);
 
-    CallBackupOperation (-1, ABORT_PROCESS, 0);
+    CallBackupOperation (-1, ABORT_PROCESS, 0, NULL);
 
     fprintf (stderr, "Waiting for security process %d to stop\n", SecurityProcessPid);
 
@@ -285,7 +292,7 @@ StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssiz
     int descriptor = -1;
 
     StackInit ((Stack *) StackBackups + StackCount, callData, initialCapacity);
-    StackCommandResponse response = CallBackupOperation (descriptor, STACK_INIT_COMMAND, 0);
+    StackCommandResponse response = CallBackupOperation (descriptor, STACK_INIT_COMMAND, 0, (Stack *)StackBackups + StackCount);
 
     if (response == OPERATION_SUCCESS){
         descriptor = requestMemory->stackDescriptor;
@@ -293,7 +300,7 @@ StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssiz
         WriteError ((Stack *)StackBackups + StackCount, response);
     }
 
-    WriteError ((Stack *)StackBackups + StackCount, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
+    WriteError ((Stack *)StackBackups + StackCount, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0, (Stack *)StackBackups + StackCount));
 
     EncryptStackAddress((Stack *)StackBackups + StackCount, stack, descriptor);
 
@@ -311,7 +318,7 @@ StackErrorCode StackDestructSecure (Stack *stack){
     Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
     StackErrorCode errorCode = StackDestruct (realStack);
-    errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, 0)) | errorCode);
+    errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, 0, realStack)) | errorCode);
 
     RETURN errorCode;
 }
@@ -326,12 +333,12 @@ StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCal
 
     Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
     StackPop (realStack, returnValue, callData);
-    WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND,   0));
+    WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND,   0, realStack));
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
     RETURN realStack->errorCode;
 }
@@ -346,22 +353,28 @@ StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData 
 
     Stack *realStack = DecryptStackAddress (stack, &descriptor);
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
     StackPush (realStack, value, callData);
-    WriteError (realStack, CallBackupOperation (descriptor, STACK_PUSH_COMMAND,  0));
+    WriteError (realStack, CallBackupOperation (descriptor, STACK_PUSH_COMMAND,  0, realStack));
 
-    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0));
+    WriteError (realStack, CallBackupOperation(descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
     RETURN realStack->errorCode;
 }
 
-StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument){
+StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack){
     PushLog (3);
 
     requestMemory->stackDescriptor = descriptor;
     requestMemory->argument = argument;
     requestMemory->command = operation;
+
+    if (stack != NULL){
+        requestMemory->stackHash = stack->stackHash;
+        requestMemory->stackHash = stack->dataHash;
+    }
+
     requestMemory->response = OPERATION_PROCESSING;
 
     while (requestMemory->response == OPERATION_PROCESSING && operation != ABORT_PROCESS);
