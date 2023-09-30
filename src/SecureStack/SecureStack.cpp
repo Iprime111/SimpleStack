@@ -19,7 +19,7 @@
 
 typedef StackErrorCode CallbackFunction_t ();
 
-#define FunctionName "(\033[1;36m%s\033[0;37m)"
+#define FunctionName "(" CYAN_COLOR "%s" WHITE_COLOR ")"
 
 #define FindStack(stack) \
     do {                                                                            \
@@ -169,10 +169,10 @@ StackErrorCode SecurityProcessDestruct () {
 StackErrorCode SecurityProcessBackupLoop (){
     PushLog (1);
 
-    #define COMMAND_(targetCommand, callback)                                                                           \
-        if (targetCommand == requestMemory->command){                                                                   \
-            callbackFunction = callback;                                                                                \
-            PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Command \033[1;35m%s\033[0;37m found\n", #targetCommand);  \
+    #define COMMAND_(targetCommand, callback)                                                                                   \
+        if (targetCommand == requestMemory->command){                                                                           \
+            callbackFunction = callback;                                                                                        \
+            PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Command" PURPLE_COLOR "%s" WHITE_COLOR "found\n", #targetCommand); \
         }
 
     do{

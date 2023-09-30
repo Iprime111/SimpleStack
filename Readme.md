@@ -34,7 +34,7 @@ Launches security process needed by `Secure_` functions. Should be called before
 Stops security process. Should be called at the end of a program.
 <br /><br />
 
-### `StackErrorCode StackInitSecure_ (Stack *stack)`
+### `StackErrorCode StackInitSecureDefault_ (Stack *stack)`
 Inits new stack. Parameter is a pointer to an existing `Stack` data structure.
 <br /><br />
 
@@ -42,11 +42,11 @@ Inits new stack. Parameter is a pointer to an existing `Stack` data structure.
 Destructs existing `Stack` data structure making it unusable.
 <br /><br />
 
-### `StackErrorCode StackPushSecure (Stack *stack, elem_t value)`
+### `StackErrorCode StackPushSecure_ (Stack *stack, elem_t value)`
 Pushes new `value` to the given `Stack` structure. Takes `value` as an argument.
 <br /><br />
 
-### `StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue)`
+### `StackErrorCode StackPopSecure_ (Stack *stack, elem_t *returnValue)`
 Pops value from the given `Stack` structure and writes it into `returnValue` variable.
 <br /><br />
 

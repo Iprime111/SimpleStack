@@ -8,6 +8,8 @@ typedef double elem_t;
 const ssize_t ReallocationScale = 2;
 const ssize_t InitialCapacity = 10;
 
+const size_t MaxAllocSize = 0x10000000000;
+
 #ifdef _USE_CANARY
     typedef unsigned long long canary_t;
 

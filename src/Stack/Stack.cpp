@@ -48,6 +48,8 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
     custom_assert (initialCapacity > 0, invalid_value, INVALID_INPUT);
     custom_assert (stack, pointer_is_null, INVALID_INPUT);
 
+    StackDestruct (stack);
+
     stack->capacity = initialCapacity;
     stack->size = 0;
     stack->errorCode = NO_ERRORS;
@@ -61,6 +63,8 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
         stack->rightCanary = CanaryNormal;
         stack->leftCanary = CanaryNormal;
     #endif
+
+    custom_assert (callocSize < MaxAllocSize, allocation_error, OVERFLOW);
 
     stack->data = (elem_t *) calloc (1, callocSize);
 
@@ -309,10 +313,25 @@ void DumpStackData (const Stack *stack){
     PRINT_VARIABLE_ (stack->capacity,          "%lld");
     PRINT_VARIABLE_ (realStackCapacity,        "%lu");
 
+    #ifdef _USE_HASH
+        PRINT_VARIABLE_(stack->stackHash, "%llu");
+        PRINT_VARIABLE_(stack->dataHash,  "%llu");
+    #endif
+
     #ifdef _USE_CANARY
         PRINT_VARIABLE_ (stack->leftCanary,        "%x");
         PRINT_VARIABLE_ (stack->rightCanary,       "%x");
     #endif
+
+    #undef PRINT_VARIABLE_
+
+
+    if (!IsAddressValid (stack->data)){
+        fprintf_color (CONSOLE_YELLOW, CONSOLE_BOLD, stderr, "\tdata (%p){\n\t\tUnable to read stack->data value\n\t}\n", stack->data);
+        fprintf_color (CONSOLE_RED,    CONSOLE_BOLD, stderr, "}\n");
+
+        return;
+    }
 
     #ifdef _USE_CANARY
         fprintf_color (CONSOLE_GREEN,  CONSOLE_BOLD, stderr, "\t%s (%p) = ", "leftDataCanary", leftCanaryPointer (stack));
@@ -322,21 +341,7 @@ void DumpStackData (const Stack *stack){
         fprintf_color (CONSOLE_PURPLE, CONSOLE_BOLD, stderr, "%x\n", *((canary_t *) (stack->data +realStackCapacity)));
     #endif
 
-    #ifdef _USE_HASH
-        PRINT_VARIABLE_(stack->stackHash, "%llu");
-        PRINT_VARIABLE_(stack->dataHash,  "%llu");
-    #endif
-
-    #undef PRINT_VARIABLE_
-
     fprintf_color (CONSOLE_PURPLE, CONSOLE_NORMAL, stderr, "\tdata (%p){\n ", stack->data);
-
-    if (!IsAddressValid (stack->data)){
-        fprintf_color (CONSOLE_YELLOW, CONSOLE_BOLD, stderr, "\t\tUnable to read stack->data value\n}\n");
-        fprintf_color (CONSOLE_RED,    CONSOLE_BOLD, stderr, "}\n");
-
-        return;
-    }
 
     for (size_t index = 0; index < realStackCapacity; index++){
         CONSOLE_COLOR dataColor = CONSOLE_RED;

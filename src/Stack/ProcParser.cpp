@@ -6,6 +6,9 @@
 #ifdef _USE_ADDRESS_VALIDATION
 
 bool IsAddressValid (const void *address) {
+    if (address == NULL)
+        return false;
+
     FILE *maps = fopen ("/proc/self/maps", "r");
 
     if (!maps)

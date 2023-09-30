@@ -13,10 +13,8 @@ const size_t MAX_STACKS_COUNT = 1024;
 #define StackPopSecure_(stack, returnValue) StackPopSecure (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 #define StackPushSecure_(stack, value) StackPushSecure (stack, value, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
-
 StackErrorCode SecurityProcessInit ();
 StackErrorCode SecurityProcessStop ();
-
 
 StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity=InitialCapacity);
 
