@@ -1,3 +1,4 @@
+#include <bits/types/FILE.h>
 #include <math.h>
 
 #ifndef STACK_H_
@@ -13,11 +14,23 @@ const size_t MaxAllocSize = 0x10000000000;
 #ifdef _USE_CANARY
     typedef unsigned long long canary_t;
 
+    #define ON_USE_CANARY(...) __VA_ARGS__
+
     #define leftCanaryPointer(stack)  ((canary_t *) (stack)->data - 1)
     #define rightCanaryPointer(stack) ((canary_t *) ((stack)->data + (stack)->capacity))
 
     const canary_t CanaryNormal = 0xFBADBEEF;
+
+#else
+
+    #define ON_USE_CANARY(...)
+
+    #define leftCanaryPointer(stack)  (stack)->data
+    #define rightCanaryPointer(stack) ((stack)->data + (stack)->capacity)
 #endif
+
+
+
 
 #ifndef _NDEBUG
     #define DumpStack(stack, stackCallData) StackDump (stack, __PRETTY_FUNCTION__, __FILE__, __LINE__, stackCallData)
@@ -87,15 +100,8 @@ struct StackCallData {
     bool showDump;
 };
 
-#ifdef _USE_CANARY
-    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
-    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#else
-    #define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
-    #define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#endif
-
-
+#define StackInitSize_(stack, initialCapacity) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true}, initialCapacity)
+#define StackInitDefault_(stack) StackInit (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
 #define StackDestruct_(stack) StackDestruct (stack)
 
@@ -111,5 +117,8 @@ StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData 
 StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData);
 
 void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
+
+void PrintStackLogo (FILE *stream);
+
 #endif
 

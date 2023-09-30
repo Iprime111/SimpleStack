@@ -1,3 +1,4 @@
+#include <climits>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
@@ -499,7 +500,7 @@ StackErrorCode StackDestructSecure (Stack *stack){
 }
 
 
-StackErrorCode StackPopSecure (Stack *stack, elem_t *RETURNValue, const StackCallData callData) {
+StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData) {
     PushLog (2);
 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
@@ -510,7 +511,7 @@ StackErrorCode StackPopSecure (Stack *stack, elem_t *RETURNValue, const StackCal
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
-    StackPop (realStack, RETURNValue, callData);
+    StackPop (realStack, returnValue, callData);
     WriteError (realStack, CallBackupOperation (descriptor, STACK_POP_COMMAND,    0, realStack));
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0, realStack));
@@ -545,7 +546,7 @@ StackErrorCode StackDumpSecure (Stack *stack, const StackCallData callData) {
     Stack *realStack = NULL;
     FindStackAddress (stack, realStack, descriptor);
 
-    StackDump (stack, callData.function, callData.file, callData.line, callData);
+    StackDump (realStack, callData.function, callData.file, callData.line, callData);
 
     RETURN NO_ERRORS;
 }
@@ -598,10 +599,8 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
 
     // Seriously, you have to stop
 
-    const size_t worksOnlyForThisBitsInChar = 8;
-
     for (size_t byteIndex = 0; byteIndex < 4; byteIndex++){
-        for (size_t bit = 0; bit < worksOnlyForThisBitsInChar; bit++){
+        for (size_t bit = 0; bit < CHAR_BIT; bit++){
             if (stackChar [byteIndex] & (1 << bit)){
 
                 if (byteIndex == 0){
@@ -623,7 +622,7 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
         RETURN NULL;
     }
 
-    *descriptor = *((int *) (void *) (stackChar + 3 * worksOnlyForThisBitsInChar));
+    *descriptor = *((int *) (void *) (stackChar + 3 * CHAR_BIT));
 
     // It would be unfair if u copy that :(
 
@@ -646,15 +645,13 @@ void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
 
     memset (outPointerChar, 0, 8);
 
-    const size_t worksOnlyForThisBitsInChar = 8;
-
     for (size_t pointerByte = 0; pointerByte < sizeof (Stack *); pointerByte++){
         size_t pointerPosition = 0, addressByte = 0, addressBit = 0;
         do {
-            pointerPosition = (size_t) rand () % 2 + pointerByte * 2 + sizeof (int) + sizeof (Stack) / worksOnlyForThisBitsInChar;
+            pointerPosition = (size_t) rand () % 2 + pointerByte * 2 + sizeof (int) + sizeof (Stack) / CHAR_BIT;
 
-            addressByte = pointerPosition / worksOnlyForThisBitsInChar;
-            addressBit  = pointerPosition % worksOnlyForThisBitsInChar;
+            addressByte = pointerPosition / CHAR_BIT;
+            addressBit  = pointerPosition % CHAR_BIT;
         } while (outPointerChar [addressByte] & 1 << addressBit);
 
         outPointerChar [pointerPosition] = stackChar [pointerByte];
@@ -666,7 +663,7 @@ void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
 
     *((int *) (void *) (outPointerChar + 4)) = checksum;
 
-    *((int *) (void *) (outPointerChar + 3 * worksOnlyForThisBitsInChar)) = descriptor;
+    *((int *) (void *) (outPointerChar + 3 * CHAR_BIT)) = descriptor;
 
     RETURN;
 }

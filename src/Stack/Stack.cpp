@@ -21,7 +21,6 @@ static size_t getRealCapacity (const Stack *stack);
 static size_t getRealAllocSize (const Stack *stack);
 
 static void UpdateHashes (Stack *stack, size_t dataSize);
-
 static void CorrectAlignment (Stack *stack);
 
 #ifdef _USE_HASH
@@ -54,11 +53,9 @@ StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t in
     stack->errorCode = NO_ERRORS;
 
     CorrectAlignment (stack);
-    size_t callocSize =  (size_t) stack->capacity * sizeof (elem_t);
+    size_t callocSize =  (size_t) stack->capacity * sizeof (elem_t) ON_USE_CANARY (+ sizeof (canary_t) * 2);
 
     #ifdef _USE_CANARY
-        callocSize += sizeof (canary_t) * 2;
-
         stack->rightCanary = CanaryNormal;
         stack->leftCanary = CanaryNormal;
     #endif
@@ -94,15 +91,10 @@ StackErrorCode StackDestruct (Stack *stack) {
         RETURN STACK_POINTER_NULL;
     }
 
-    if (IsAddressValid (stack->data)){
+    if (IsAddressValid (stack->data)) {
 
-        #ifdef _USE_CANARY
-            memset(leftCanaryPointer (stack), 0, getRealAllocSize (stack));
-            free  (leftCanaryPointer (stack));
-        #else
-            memset(stack->data, 0, getRealAllocSize (stack));
-            free  (stack->data);
-        #endif
+        memset(leftCanaryPointer (stack), 0, getRealAllocSize (stack));
+        free  (leftCanaryPointer (stack));
     }
 
     stack->data = NULL;
@@ -130,31 +122,21 @@ StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
 
    CorrectAlignment (stack);
 
-    size_t reallocSize  = (size_t) stack->capacity * sizeof (elem_t);
+    size_t reallocSize  = (size_t) stack->capacity * sizeof (elem_t) ON_USE_CANARY (+ sizeof (canary_t) * 2);
 
-    #ifdef _USE_CANARY
-        reallocSize += sizeof (canary_t) * 2;
-        canary_t *reallocPointer = (canary_t *) stack->data - 1;
-    #else
-        elem_t *reallocPointer = stack->data;
-    #endif
 
-    elem_t *testDataPointer = (elem_t *) realloc (reallocPointer,  reallocSize);
+    elem_t *testDataPointer = (elem_t *) realloc (leftCanaryPointer (stack),  reallocSize);
 
     if (!testDataPointer){
         stack->errorCode = (StackErrorCode) (stack->errorCode | REALLOCATION_ERROR);
         RETURN stack->errorCode;
     }
 
-    #ifdef _USE_CANARY
-        testDataPointer = (elem_t *) ((canary_t *) testDataPointer + 1);
-    #endif
+    ON_USE_CANARY (testDataPointer = (elem_t *) ((canary_t *) testDataPointer + 1));
 
     stack->data = testDataPointer;
 
-    #ifdef _USE_CANARY
-        *rightCanaryPointer (stack) = CanaryNormal;
-    #endif
+    ON_USE_CANARY (*rightCanaryPointer (stack) = CanaryNormal);
 
     UpdateHashes (stack, reallocSize);
 
@@ -223,7 +205,7 @@ StackErrorCode StackVerifier (Stack *stack) {
     VerifyExpression_ (stack->size <= stack->capacity,     OVERFLOW);
 
     size_t realCapacity = getRealCapacity (stack);
-    size_t allocSize = realCapacity * sizeof (elem_t);
+    size_t allocSize = realCapacity * sizeof (elem_t) ON_USE_CANARY (+ 2 * sizeof (canary_t));
 
     #ifdef _USE_CANARY
         VerifyExpression_ (stack->leftCanary == CanaryNormal,  STACK_CANARY_CORRUPTED);
@@ -234,9 +216,6 @@ StackErrorCode StackVerifier (Stack *stack) {
             VerifyExpression_ (*(((canary_t *) stack->data - 1)) == CanaryNormal,               DATA_CANARY_CORRUPTED);
             VerifyExpression_ (*((canary_t *) (stack->data + realCapacity)) == CanaryNormal,    DATA_CANARY_CORRUPTED);
         }
-
-        allocSize += 2 * sizeof (canary_t);
-
     #endif
 
     #ifdef _USE_HASH
@@ -387,11 +366,7 @@ size_t getRealAllocSize (const Stack *stack){
         RETURN 0;
     }
 
-    #ifdef _USE_CANARY
-        RETURN malloc_usable_size ((canary_t *) (const_cast <elem_t *> (stack->data)) - 1);
-    #else
-        RETURN malloc_usable_size (const_cast <elem_t *> (stack->data));
-    #endif
+    RETURN malloc_usable_size (leftCanaryPointer (stack));
 }
 
 
@@ -402,20 +377,56 @@ size_t getRealCapacity (const Stack *stack){
         RETURN 0;
     }
 
-    #ifdef _USE_CANARY
-        RETURN (getRealAllocSize(stack) - 2 * sizeof (canary_t)) / sizeof (elem_t);
-    #else
-        RETURN getRealAllocSize(stack) / sizeof (elem_t);
-    #endif
+
+    RETURN (getRealAllocSize(stack) ON_USE_CANARY (- 2 * sizeof (canary_t))) / sizeof (elem_t);
 }
 
 void CorrectAlignment (Stack *stack){
     PushLog (3);
+    #ifdef _USE_CANARY
+        custom_assert (IsAddressValid (stack), pointer_is_null, (void) 0);
 
-    custom_assert (IsAddressValid (stack), pointer_is_null, (void) 0);
+        while (((size_t) stack->capacity * sizeof (elem_t)) % sizeof (canary_t) != 0)
+            stack->capacity++;
 
-    while (((size_t) stack->capacity * sizeof (elem_t)) % sizeof (canary_t) != 0)
-        stack->capacity++;
+    #endif
+
+    RETURN;
+}
+
+void PrintStackLogo (FILE *stream) {
+    PushLog (3);
+
+    if (!IsAddressValid (stream)){
+        RETURN;
+    }
+
+    fputs ("\n\n", stream);
+
+    char *logo [] = {
+
+
+        "  /$$$$$$  /$$                         /$$                  /$$$$$$   /$$                         /$$",
+        " /$$__  $$|__/                        | $$                 /$$__  $$ | $$                        | $$",
+        "| $$  \\__/ /$$ /$$$$$$/$$$$   /$$$$$$ | $$  /$$$$$$       | $$  \\__//$$$$$$    /$$$$$$   /$$$$$$$| $$   /$$",
+        "|  $$$$$$ | $$| $$_  $$_  $$ /$$__  $$| $$ /$$__  $$      |  $$$$$$|_  $$_/   |____  $$ /$$_____/| $$  /$$/",
+        " \\____  $$| $$| $$ \\ $$ \\ $$| $$  \\ $$| $$| $$$$$$$$       \\____  $$ | $$      /$$$$$$$| $$      | $$$$$$/",
+        " /$$  \\ $$| $$| $$ | $$ | $$| $$  | $$| $$| $$_____/       /$$  \\ $$ | $$ /$$ /$$__  $$| $$      | $$_  $$",
+        "|  $$$$$$/| $$| $$ | $$ | $$| $$$$$$$/| $$|  $$$$$$$      |  $$$$$$/ |  $$$$/|  $$$$$$$|  $$$$$$$| $$ \\  $$",
+        " \\______/ |__/|__/ |__/ |__/| $$____/ |__/ \\_______/       \\______/   \\___/   \\_______/ \\_______/|__/  \\__/",
+        "                            | $$",
+        "                            | $$",
+        "                            |__/"
+    };
+
+    for (size_t line = 0; line < sizeof (logo) / sizeof (logo [0]); line++){
+        fputs (logo [line], stream);
+        fputs ("\n", stream);
+    }
+
+    fputs ("\n\nCopyright Ded's course, MIPT, 2023\n\n\n\n", stream);
+
+    fflush (stream);
 
     RETURN;
 }

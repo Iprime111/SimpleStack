@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <stdio.h>
 #include <sys/wait.h>
 
@@ -7,6 +8,8 @@
 
 int main() {
     PushLog (1);
+
+    PrintStackLogo (stdout);
 
     SecurityProcessInit ();
 
@@ -24,6 +27,8 @@ int main() {
 
     StackPopSecure_ (&test_stack, &test_variable);
 
+    StackDumpSecure_ (&test_stack);
+
     fprintf (stderr, "Destroying stack...\n");
 
     StackDestructSecure_ (&test_stack);
@@ -34,3 +39,4 @@ int main() {
 
     RETURN 0;
 }
+
