@@ -14,7 +14,6 @@
 static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
 static StackErrorCode StackVerifier (Stack *stack);
 
-static void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
 static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
 static void DumpStackData (const Stack *stack);
 
@@ -371,7 +370,7 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
     if (!callData.showDump)
         return;
 
-    DumpErrors ((stack ? stack->errorCode : STACK_POINTER_NULL), function, file, line, callData);
+    DumpErrors ((IsAddressValid (stack) ? stack->errorCode : STACK_POINTER_NULL), function, file, line, callData);
 
     DumpStackData (stack);
 

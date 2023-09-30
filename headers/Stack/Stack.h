@@ -99,17 +99,17 @@ struct StackCallData {
 
 #define StackDestruct_(stack) StackDestruct (stack)
 
-#define StackPop_(stack, returnValue) StackPop (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#define StackPush_(stack, value)     StackPush (stack, value,       StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackPop_(stack, returnValue) StackPop  (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackPush_(stack, value)      StackPush (stack, value,       StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackDump_(stack)             StackDump (stack, __PRETTY_FUNCTION__, __FILE__, __LINE__, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
 
 StackErrorCode StackInit (Stack *stack, const StackCallData callData, ssize_t initialCapacity = InitialCapacity);
-
 StackErrorCode StackDestruct (Stack *stack);
 
-
 StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData);
-
 StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData);
+
+void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
 #endif
 

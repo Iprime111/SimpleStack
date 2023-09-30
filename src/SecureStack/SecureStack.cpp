@@ -19,7 +19,7 @@
 
 typedef StackErrorCode CallbackFunction_t ();
 
-#define FunctionName "(" CYAN_COLOR "%s" WHITE_COLOR ")"
+#define FunctionName "(" CYAN_COLOR "% s " WHITE_COLOR ")"
 
 #define FindStack(stack) \
     do {                                                                            \
@@ -62,7 +62,7 @@ static void *StackBackups = NULL;
 //=================================================================== CHILD PROCESS PROTOTYPES ========================================================================================
 //=====================================================================================================================================================================================
 
-StackOperationRequest *CreateSharedMemory (size_t size);
+static StackOperationRequest *CreateSharedMemory (size_t size);
 
 static StackErrorCode SecurityProcessDestruct ();
 static StackErrorCode SecurityProcessBackupLoop ();
@@ -172,7 +172,7 @@ StackErrorCode SecurityProcessBackupLoop (){
     #define COMMAND_(targetCommand, callback)                                                                                   \
         if (targetCommand == requestMemory->command){                                                                           \
             callbackFunction = callback;                                                                                        \
-            PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Command" PURPLE_COLOR "%s" WHITE_COLOR "found\n", #targetCommand); \
+            PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Command" PURPLE_COLOR " %s " WHITE_COLOR "found\n", #targetCommand); \
         }
 
     do{
@@ -435,6 +435,14 @@ static void PrintOperationResult (FILE *stream, StackCommandResponse response, c
 
 #define WriteError(errorStack, function) (errorStack)->errorCode = (StackErrorCode) (ResponseToError (function) | (errorStack)->errorCode)
 
+#define FindStackAddress(stack, realStack, descriptor)      \
+    realStack = DecryptStackAddress (stack, &descriptor);   \
+    if (!realStack){                                        \
+        StackDump_ (realStack);                             \
+        RETURN STACK_POINTER_NULL;                          \
+    }
+
+
 StackErrorCode SecurityProcessStop () {
     PushLog (2);
 
@@ -479,8 +487,8 @@ StackErrorCode StackDestructSecure (Stack *stack){
     custom_assert (IsAddressValid (stack), pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
-
-    Stack *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = NULL;
+    FindStackAddress (stack, realStack, descriptor);
 
     StackErrorCode errorCode = StackDestruct (realStack);
     errorCode = (StackErrorCode) (ResponseToError (CallBackupOperation (descriptor, STACK_DESTRUCT_COMMAND, 0, realStack)) | errorCode);
@@ -497,8 +505,8 @@ StackErrorCode StackPopSecure (Stack *stack, elem_t *RETURNValue, const StackCal
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
-
-    Stack *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = NULL;
+    FindStackAddress (stack, realStack, descriptor);
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0, realStack));
 
@@ -517,8 +525,8 @@ StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData 
     custom_assert (stack, pointer_is_null, STACK_POINTER_NULL);
 
     int descriptor = -1;
-
-    Stack *realStack = DecryptStackAddress (stack, &descriptor);
+    Stack *realStack = NULL;
+    FindStackAddress (stack, realStack, descriptor);
 
     WriteError (realStack, CallBackupOperation (descriptor, STACK_VERIFY_COMMAND, 0,     realStack));
 
@@ -530,7 +538,19 @@ StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData 
     RETURN realStack->errorCode;
 }
 
-StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack){
+StackErrorCode StackDumpSecure (Stack *stack, const StackCallData callData) {
+    PushLog (2);
+
+    int descriptor = -1;
+    Stack *realStack = NULL;
+    FindStackAddress (stack, realStack, descriptor);
+
+    StackDump (stack, callData.function, callData.file, callData.line, callData);
+
+    RETURN NO_ERRORS;
+}
+
+StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack) {
     PushLog (3);
 
     requestMemory->stackDescriptor = descriptor;
@@ -570,8 +590,8 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     custom_assert(descriptor, pointer_is_null, NULL);
 
     char *stackChar = (char *) stack;
-    Stack *RETURNPointer = 0;
-    char * RETURNPointerPointer = (char *) (&RETURNPointer);
+    Stack *returnPointer = 0;
+    char * returnPointerPointer = (char *) (&returnPointer);
     size_t byteNumber = 0;
 
     int checksum = 0;
@@ -594,7 +614,7 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
 
                 checksum += stackChar [byteIndex * 8 + bit];
 
-                RETURNPointerPointer [byteNumber++] = stackChar [byteIndex * 8 + bit];
+                returnPointerPointer [byteNumber++] = stackChar [byteIndex * 8 + bit];
             }
         }
     }
@@ -607,7 +627,7 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
 
     // It would be unfair if u copy that :(
 
-    RETURN RETURNPointer;
+    RETURN returnPointer;
 }
 
 void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
@@ -652,3 +672,4 @@ void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
 }
 
 #undef WriteError
+#undef FindStackAddress

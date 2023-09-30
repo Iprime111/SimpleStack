@@ -7,22 +7,22 @@
 const size_t PIPE_BUFFER_SIZE = 1024;
 const size_t MAX_STACKS_COUNT = 1024;
 
-#define StackInitDefaultSecure_(stack) StackInitSecure (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#define StackDestructSecure_(stack) StackDestructSecure (stack)
+#define StackInitDefaultSecure_(stack)      StackInitSecure (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackDestructSecure_(stack)         StackDestructSecure (stack)
 
 #define StackPopSecure_(stack, returnValue) StackPopSecure (stack, returnValue, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
-#define StackPushSecure_(stack, value) StackPushSecure (stack, value, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+#define StackPushSecure_(stack, value)      StackPushSecure (stack, value, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
+
+#define StackDumpSecure_(stack)             StackDumpSecure (stack, StackCallData{__PRETTY_FUNCTION__, __FILE__, __LINE__, #stack, true})
 
 StackErrorCode SecurityProcessInit ();
 StackErrorCode SecurityProcessStop ();
 
 StackErrorCode StackInitSecure (Stack *stack, const StackCallData callData, ssize_t initialCapacity=InitialCapacity);
-
 StackErrorCode StackDestructSecure (Stack *stack);
-
 StackErrorCode StackPopSecure (Stack *stack, elem_t *returnValue, const StackCallData callData);
-
 StackErrorCode StackPushSecure (Stack *stack, elem_t value, const StackCallData callData);
+StackErrorCode StackDumpSecure (Stack *stack, const StackCallData callData);
 
 enum StackCommand {
     UNKNOWN_COMMAND          = 0,

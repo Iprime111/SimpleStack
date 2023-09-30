@@ -8,11 +8,11 @@
 int main() {
     PushLog (1);
 
-    //SecurityProcessInit ();
+    SecurityProcessInit ();
 
     Stack test_stack = {};
 
-    StackInitDefault_ (&test_stack);
+    StackInitDefaultSecure_ (&test_stack);
 
     elem_t test_variable = 5;
 
@@ -30,7 +30,7 @@ int main() {
 
     fprintf (stderr, "Stopping security process...\n");
 
-    //SecurityProcessStop ();
+    SecurityProcessStop ();
 
     RETURN 0;
 }
