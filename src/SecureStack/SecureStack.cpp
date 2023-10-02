@@ -303,11 +303,17 @@ StackErrorCode VerifyStackSecureProcess (){
     Stack *stack = NULL;
     FindStack (stack);
 
+    #ifdef _USE_HASH
+
     if (requestMemory->dataHash == stack->dataHash){
         OperationSuccess (operationName);
     }
 
     OperationFail (operationName, WRONG_DATA_HASH);
+
+    #else
+    OperationSuccess (operationName);
+    #endif
 }
 
 Stack *GetStackFromDescriptor (int stackDescriptor){
@@ -558,10 +564,12 @@ StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation
     requestMemory->argument = argument;
     requestMemory->command = operation;
 
+    #ifdef _USE_HASH
     if (stack != NULL){
         requestMemory->stackHash = stack->stackHash;
         requestMemory->dataHash  = stack->dataHash;
     }
+    #endif
 
     requestMemory->response = OPERATION_PROCESSING;
 
