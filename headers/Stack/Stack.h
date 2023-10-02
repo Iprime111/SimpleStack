@@ -16,7 +16,7 @@ const size_t MaxAllocSize = 0x10000000000;
 
     #define ON_USE_CANARY(...) __VA_ARGS__
 
-    #define leftCanaryPointer(stack)  ((canary_t *) (stack)->data - 1)
+    #define leftCanaryPointer(stack)  ((canary_t *) ((stack)->data) - 1)
     #define rightCanaryPointer(stack) ((canary_t *) ((stack)->data + (stack)->capacity))
 
     const canary_t CanaryNormal = 0xFBADBEEF;

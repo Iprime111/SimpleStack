@@ -10,6 +10,7 @@
 #include "CustomAssert.h"
 #include "ColorConsole.h"
 
+#define DataMemorySize(stack) ((size_t)(stack)->capacity * sizeof (elem_t) ON_USE_CANARY (+ 2 * sizeof (canary_t)))
 
 static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
 static StackErrorCode StackVerifier (Stack *stack);
@@ -165,7 +166,7 @@ StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData 
         *returnValue = stack->data [stack->size];
     }
 
-    UpdateHashes (stack, getRealAllocSize(stack));
+    UpdateHashes (stack, DataMemorySize(stack));
 
     stack->errorCode = (StackErrorCode) (StackRealloc (stack, callData) | stack->errorCode);
 
@@ -182,7 +183,7 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
     if (stack->errorCode == NO_ERRORS)
         stack->data [stack->size++] = value;
 
-    UpdateHashes (stack, getRealAllocSize(stack));
+    UpdateHashes (stack, DataMemorySize(stack));
 
     RETURN stack->errorCode;
 }
@@ -204,8 +205,7 @@ StackErrorCode StackVerifier (Stack *stack) {
     VerifyExpression_ (stack->size >= 0,                   ANTI_OVERFLOW);
     VerifyExpression_ (stack->size <= stack->capacity,     OVERFLOW);
 
-    size_t realCapacity = getRealCapacity (stack);
-    size_t allocSize = realCapacity * sizeof (elem_t) ON_USE_CANARY (+ 2 * sizeof (canary_t));
+    size_t allocSize = DataMemorySize (stack);
 
     #ifdef _USE_CANARY
         VerifyExpression_ (stack->leftCanary == CanaryNormal,  STACK_CANARY_CORRUPTED);
@@ -213,8 +213,8 @@ StackErrorCode StackVerifier (Stack *stack) {
 
 
         if (!(stack->errorCode & DATA_POINTER_NULL)){
-            VerifyExpression_ (*(((canary_t *) stack->data - 1)) == CanaryNormal,               DATA_CANARY_CORRUPTED);
-            VerifyExpression_ (*((canary_t *) (stack->data + realCapacity)) == CanaryNormal,    DATA_CANARY_CORRUPTED);
+            VerifyExpression_ (*leftCanaryPointer(stack) == CanaryNormal,               DATA_CANARY_CORRUPTED);
+            VerifyExpression_ (*rightCanaryPointer(stack) == CanaryNormal,    DATA_CANARY_CORRUPTED);
         }
     #endif
 

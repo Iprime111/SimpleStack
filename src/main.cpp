@@ -19,7 +19,7 @@ int main() {
 
     elem_t test_variable = 5;
 
-    for (int i = 0; i < 15; i++){
+    for (int i = 0; i < 80; i++){
         StackPushSecure_ (&test_stack, test_variable);
     }
 
