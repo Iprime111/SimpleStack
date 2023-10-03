@@ -27,7 +27,7 @@ static void CorrectAlignment (Stack *stack);
 #ifdef _USE_HASH
 
 
-    void UpdateHashes (Stack *stack, size_t dataSize) {
+    static void UpdateHashes (Stack *stack, size_t dataSize) {
         StackErrorCode hashErrorCode = NO_ERRORS;
         hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeStackHash (stack, &((stack)->stackHash)));
         hashErrorCode = (StackErrorCode) (hashErrorCode | ComputeDataHash  (stack, dataSize, &((stack)->dataHash)));
@@ -36,7 +36,7 @@ static void CorrectAlignment (Stack *stack);
 
 #else
 
-    void UpdateHashes (Stack *stack, size_t dataSize) {}
+    static void UpdateHashes (Stack *stack, size_t dataSize) {}
 
 #endif
 
@@ -107,7 +107,7 @@ StackErrorCode StackDestruct (Stack *stack) {
 }
 
 
-StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
+static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData){
     PushLog (3);
     VerifyStack (stack, callData);
 
@@ -188,7 +188,7 @@ StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callDa
     RETURN stack->errorCode;
 }
 
-StackErrorCode StackVerifier (Stack *stack) {
+static StackErrorCode StackVerifier (Stack *stack) {
     PushLog (3);
 
     if (!IsAddressValid (stack)){
@@ -233,7 +233,7 @@ StackErrorCode StackVerifier (Stack *stack) {
     RETURN stack->errorCode;
 }
 
-void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData){
+static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData){
     custom_assert_without_logger (function != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (file     != NULL, pointer_is_null,     (void)0);
     custom_assert_without_logger (function != file, not_enough_pointers, (void)0);
@@ -270,7 +270,7 @@ void DumpErrors (const StackErrorCode errorCode, const char *function, const cha
 }
 
 
-void DumpStackData (const Stack *stack){
+static void DumpStackData (const Stack *stack){
     if (!IsAddressValid (stack)){
         fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Unable to read stack value\n");
 
@@ -359,7 +359,7 @@ void StackDump (const Stack *stack, const char *function, const char *file, int 
 }
 
 
-size_t getRealAllocSize (const Stack *stack){
+static size_t getRealAllocSize (const Stack *stack){
     PushLog (3);
 
     if (!IsAddressValid (stack) || !IsAddressValid (stack->data)){
@@ -370,7 +370,7 @@ size_t getRealAllocSize (const Stack *stack){
 }
 
 
-size_t getRealCapacity (const Stack *stack){
+static size_t getRealCapacity (const Stack *stack){
     PushLog (3);
 
     if (!IsAddressValid (stack) || !IsAddressValid (stack->data)){
@@ -381,7 +381,7 @@ size_t getRealCapacity (const Stack *stack){
     RETURN (getRealAllocSize(stack) ON_USE_CANARY (- 2 * sizeof (canary_t))) / sizeof (elem_t);
 }
 
-void CorrectAlignment (Stack *stack){
+static void CorrectAlignment (Stack *stack){
     PushLog (3);
     #ifdef _USE_CANARY
         custom_assert (IsAddressValid (stack), pointer_is_null, (void) 0);

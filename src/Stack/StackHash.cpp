@@ -104,7 +104,7 @@ StackErrorCode ComputeDataHash (Stack *stack, size_t dataLength, hash_t *hash) {
     RETURN NO_ERRORS;
 }
 
-hash_t HashFunction (char *array, size_t length) {
+static hash_t HashFunction (char *array, size_t length) {
     PushLog (4);
 
     hash_t hash = 5381;

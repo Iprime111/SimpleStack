@@ -88,7 +88,7 @@ static void PrintOperationResult (FILE *stream, StackCommandResponse response, c
 
 
 static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack);
-StackErrorCode ResponseToError (StackCommandResponse response);
+static StackErrorCode ResponseToError (StackCommandResponse response);
 
 static void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor);
 static Stack *DecryptStackAddress (Stack *stack, int *descriptor);
@@ -99,7 +99,7 @@ static Stack *DecryptStackAddress (Stack *stack, int *descriptor);
 //=====================================================================================================================================================================================
 
 
-StackOperationRequest *CreateSharedMemory (size_t size){
+static StackOperationRequest *CreateSharedMemory (size_t size){
     PushLog (3);
 
     StackOperationRequest *memory = (StackOperationRequest *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -119,6 +119,7 @@ StackErrorCode SecurityProcessInit (){
     SecurityProcessPid = fork ();
 
     if (SecurityProcessPid < 0){
+        perror("");
         PrintSecurityProcessInfo (stderr, ERROR_MESSAGE, "Error occuried while forking\n");
 
         RETURN SECURITY_PROCESS_ERROR;
@@ -143,7 +144,7 @@ StackErrorCode SecurityProcessInit (){
 }
 
 
-StackErrorCode SecurityProcessDestruct () {
+static StackErrorCode SecurityProcessDestruct () {
     PushLog (1);
 
     PrintSecurityProcessInfo (stderr, INFO_MESSAGE, "Destroying security process...\n");
@@ -167,7 +168,7 @@ StackErrorCode SecurityProcessDestruct () {
 }
 
 
-StackErrorCode SecurityProcessBackupLoop (){
+static StackErrorCode SecurityProcessBackupLoop (){
     PushLog (1);
 
     #define COMMAND_(targetCommand, callback)                                                                                   \
@@ -215,7 +216,7 @@ StackErrorCode SecurityProcessBackupLoop (){
     RETURN NO_ERRORS;
 }
 
-StackErrorCode StackInitSecureProcess () {
+static StackErrorCode StackInitSecureProcess () {
     PushLog (2);
 
     const char operationName [] = "init stack";
@@ -237,7 +238,7 @@ StackErrorCode StackInitSecureProcess () {
 }
 
 
-StackErrorCode StackDestructSecureProcess () {
+static StackErrorCode StackDestructSecureProcess () {
     PushLog (2);
 
     const char operationName [] = "stack destruct";
@@ -255,7 +256,7 @@ StackErrorCode StackDestructSecureProcess () {
 }
 
 
-StackErrorCode StackPopSecureProcess () {
+static StackErrorCode StackPopSecureProcess () {
     PushLog (2);
 
     const char operationName [] = "stack pop";
@@ -273,7 +274,7 @@ StackErrorCode StackPopSecureProcess () {
 }
 
 
-StackErrorCode StackPushSecureProcess () {
+static StackErrorCode StackPushSecureProcess () {
     PushLog (2);
 
     const char operationName [] = "stack push";
@@ -295,7 +296,7 @@ StackErrorCode StackPushSecureProcess () {
     OperationFail (operationName, errorCode);
 }
 
-StackErrorCode VerifyStackSecureProcess (){
+static StackErrorCode VerifyStackSecureProcess (){
     PushLog (2);
 
     const char operationName [] = "stack verification";
@@ -316,7 +317,7 @@ StackErrorCode VerifyStackSecureProcess (){
     #endif
 }
 
-Stack *GetStackFromDescriptor (int stackDescriptor){
+static Stack *GetStackFromDescriptor (int stackDescriptor){
     PushLog (3);
 
     custom_assert (stackDescriptor >= 0,                  invalid_value, NULL);
@@ -325,7 +326,7 @@ Stack *GetStackFromDescriptor (int stackDescriptor){
     RETURN (Stack *) StackBackups + stackDescriptor;
 }
 
-void WriteResult (StackErrorCode errorCode) {
+static void WriteResult (StackErrorCode errorCode) {
     PushLog (3);
 
 
@@ -339,7 +340,7 @@ void WriteResult (StackErrorCode errorCode) {
     RETURN;
 }
 
-void WriteCommandResponse (StackCommandResponse response) {
+static void WriteCommandResponse (StackCommandResponse response) {
     PushLog (3);
     custom_assert (IsAddressValid (requestMemory), pointer_is_null, (void)0);
 
@@ -557,7 +558,7 @@ StackErrorCode StackDumpSecure (Stack *stack, const StackCallData callData) {
     RETURN NO_ERRORS;
 }
 
-StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack) {
+static StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation, elem_t argument, Stack *stack) {
     PushLog (3);
 
     requestMemory->stackDescriptor = descriptor;
@@ -578,7 +579,7 @@ StackCommandResponse CallBackupOperation (int descriptor, StackCommand operation
     RETURN requestMemory->response;
 }
 
-StackErrorCode ResponseToError (StackCommandResponse response){
+static StackErrorCode ResponseToError (StackCommandResponse response){
     return (response == OPERATION_SUCCESS ? NO_ERRORS : EXTERNAL_VERIFY_FAILED);
 }
 
@@ -590,7 +591,7 @@ StackErrorCode ResponseToError (StackCommandResponse response){
 //==================================== CODE BELOW WORKS ONLY WITH 8 BITS IN BYTE, sizeof (char) == 1 AND sizeof (Stack *) == 32 =====================================
 //===================================================================================================================================================================
 
-Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
+static Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     // Why are you doing that, dude?
 
     PushLog (4);
@@ -637,7 +638,7 @@ Stack *DecryptStackAddress (Stack *stack, int *descriptor) {
     RETURN returnPointer;
 }
 
-void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
+static void EncryptStackAddress (Stack *stack, Stack *outPointer, int descriptor) {
     PushLog (4);
 
     custom_assert (stack,               pointer_is_null,     (void) 0);
