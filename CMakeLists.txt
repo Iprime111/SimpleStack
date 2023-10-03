@@ -8,4 +8,4 @@ target_include_directories (stack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/headers)
 add_subdirectory (CustomAssert)
 add_subdirectory (src)
 
-target_link_libraries (stack PUBLIC CustomAssert)
+target_link_libraries (stack PRIVATE CustomAssert)
