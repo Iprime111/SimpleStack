@@ -1,3 +1,6 @@
 [submodule "CustomAssert"]
 	path = CustomAssert
 	url = https://github.com/Iprime111/CustomAssert
+[submodule "ColorConsole"]
+	path = ColorConsole
+	url = https://github.com/Iprime111/ColorConsole
