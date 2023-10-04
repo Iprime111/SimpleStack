@@ -4,8 +4,6 @@
 #ifndef STACK_H_
 #define STACK_H_
 
-typedef double elem_t;
-
 const ssize_t ReallocationScale = 2;
 const ssize_t InitialCapacity = 10;
 
