@@ -5,9 +5,9 @@
 #include <iostream>
 #include <stdexcept>
 
-static unsigned long long HashFunction (char *array, size_t length);
-
 #ifdef _USE_HASH
+
+static unsigned long long HashFunction (char *array, size_t length);
 
 StackErrorCode CompareStackHash (Stack *stack){
     PushLog (3);

@@ -205,25 +205,24 @@ static StackErrorCode StackVerifier (Stack *stack) {
     VerifyExpression_ (stack->size >= 0,                   ANTI_OVERFLOW);
     VerifyExpression_ (stack->size <= stack->capacity,     OVERFLOW);
 
-    size_t allocSize = DataMemorySize (stack);
-
     #ifdef _USE_CANARY
         VerifyExpression_ (stack->leftCanary == CanaryNormal,  STACK_CANARY_CORRUPTED);
         VerifyExpression_ (stack->rightCanary == CanaryNormal, STACK_CANARY_CORRUPTED);
 
 
         if (!(stack->errorCode & DATA_POINTER_NULL)){
-            VerifyExpression_ (*leftCanaryPointer(stack) == CanaryNormal,               DATA_CANARY_CORRUPTED);
+            VerifyExpression_ (*leftCanaryPointer(stack) == CanaryNormal,     DATA_CANARY_CORRUPTED);
             VerifyExpression_ (*rightCanaryPointer(stack) == CanaryNormal,    DATA_CANARY_CORRUPTED);
         }
     #endif
 
     #ifdef _USE_HASH
+        size_t allocSize = DataMemorySize (stack);
 
-        StackErrorCode stackHashErrorCode = CompareStackHash(stack);
-        StackErrorCode  dataHashErrorCode = CompareDataHash(stack, allocSize);
+        StackErrorCode stackHashErrorCode = CompareStackHash (stack);
+        StackErrorCode  dataHashErrorCode = CompareDataHash  (stack, allocSize);
 
-        VerifyExpression_(stackHashErrorCode == NO_ERRORS, stackHashErrorCode);
+        VerifyExpression_(stackHashErrorCode == NO_ERRORS,  stackHashErrorCode);
         VerifyExpression_( dataHashErrorCode == NO_ERRORS,  dataHashErrorCode);
 
     #endif
