@@ -425,8 +425,8 @@ static void PrintOperationResult (FILE *stream, StackCommandResponse response, c
 }
 #else
 
-static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType,   const char *message, ...) {}
-static void PrintOperationResult (FILE *stream, StackCommandResponse response, const char *operationName) {}
+static void PrintSecurityProcessInfo (FILE *stream, MessageType messageType,       const char *message, ...) {}
+static void PrintOperationResult     (FILE *stream, StackCommandResponse response, const char *operationName) {}
 
 #endif
 
