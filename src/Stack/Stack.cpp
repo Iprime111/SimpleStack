@@ -16,7 +16,6 @@ static StackErrorCode StackRealloc (Stack *stack, const StackCallData callData);
 static StackErrorCode StackVerifier (Stack *stack);
 
 static void DumpErrors (const StackErrorCode errorCode, const char *function, const char *file, int line, const StackCallData callData);
-static void DumpStackData (const Stack *stack);
 
 static size_t getRealCapacity (const Stack *stack);
 static size_t getRealAllocSize (const Stack *stack);
