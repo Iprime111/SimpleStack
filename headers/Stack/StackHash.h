@@ -5,11 +5,9 @@
 
 typedef unsigned long long hash_t;
 
-
 StackErrorCode CompareStackHash (Stack *stk);
 
 StackErrorCode CompareDataHash (Stack *stk, size_t dataLength);
-
 
 StackErrorCode ComputeStackHash (Stack *stack, hash_t *hash);
 

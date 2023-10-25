@@ -269,7 +269,7 @@ static void DumpErrors (const StackErrorCode errorCode, const char *function, co
 }
 
 
-static void DumpStackData (const Stack *stack){
+void DumpStackData (const Stack *stack) {
     if (!IsAddressValid (stack)){
         fprintf_color (CONSOLE_RED, CONSOLE_BOLD, stderr, "Unable to read stack value\n");
 
@@ -303,7 +303,7 @@ static void DumpStackData (const Stack *stack){
     #undef PRINT_VARIABLE_
 
 
-    if (!IsAddressValid (stack->data)){
+    if (!IsAddressValid (stack->data)) {
         fprintf_color (CONSOLE_YELLOW, CONSOLE_BOLD, stderr, "\tdata (%p){\n\t\tUnable to read stack->data value\n\t}\n", stack->data);
         fprintf_color (CONSOLE_RED,    CONSOLE_BOLD, stderr, "}\n");
 

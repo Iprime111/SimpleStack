@@ -116,7 +116,8 @@ StackErrorCode StackDestruct (Stack *stack);
 StackErrorCode StackPop (Stack *stack, elem_t *returnValue, const StackCallData callData);
 StackErrorCode StackPush (Stack *stack, elem_t value, const StackCallData callData);
 
-void StackDump (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
+void StackDump     (const Stack *stack, const char *function, const char *file, int line, const StackCallData callData);
+void DumpStackData (const Stack *stack);
 
 void PrintStackLogo (FILE *stream);
 
